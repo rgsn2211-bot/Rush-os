@@ -5,7 +5,7 @@ import Link from "next/link";
 
 export function OwnerHeader() {
   return (
-    <header className="border-line sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-white px-8">
+    <header className="border-line sticky top-0 z-10 hidden h-16 items-center justify-between border-b bg-white px-8 lg:flex">
       {/* Search */}
       <div className="relative w-80 max-w-[40%]">
         <Search

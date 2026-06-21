@@ -2,123 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutGrid,
-  ClipboardCheck,
-  Bell,
-  Package,
-  Tag,
-  Banknote,
-  BarChart3,
-  Truck,
-  Gift,
-  Trash2,
-  Sparkles,
-  Settings,
-  User,
-} from "lucide-react";
+import { Settings, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "./logo";
-
-type NavItem =
-  | {
-      type: "link";
-      id: string;
-      label: string;
-      href: string;
-      icon: React.ElementType;
-      badge?: number;
-    }
-  | { type: "section"; label: string };
-
-const nav: NavItem[] = [
-  {
-    type: "link",
-    id: "dashboard",
-    label: "Dashboard",
-    href: "/owner",
-    icon: LayoutGrid,
-  },
-  {
-    type: "link",
-    id: "review",
-    label: "Review Center",
-    href: "/owner/review",
-    icon: ClipboardCheck,
-  },
-  {
-    type: "link",
-    id: "alerts",
-    label: "Alerts",
-    href: "/owner/alerts",
-    icon: Bell,
-  },
-  { type: "section", label: "Operations" },
-  {
-    type: "link",
-    id: "inventory",
-    label: "Inventory",
-    href: "/owner/inventory",
-    icon: Package,
-  },
-  {
-    type: "link",
-    id: "products",
-    label: "Product Costing",
-    href: "/owner/products",
-    icon: Tag,
-  },
-  { type: "section", label: "Finance" },
-  {
-    type: "link",
-    id: "money",
-    label: "Money",
-    href: "/owner/money",
-    icon: Banknote,
-  },
-  {
-    type: "link",
-    id: "profit",
-    label: "Profit Reports",
-    href: "/owner/profit",
-    icon: BarChart3,
-  },
-  {
-    type: "link",
-    id: "delivery",
-    label: "Delivery Apps",
-    href: "/owner/delivery",
-    icon: Truck,
-  },
-  {
-    type: "link",
-    id: "comp",
-    label: "Complimentary",
-    href: "/owner/complimentary",
-    icon: Gift,
-  },
-  {
-    type: "link",
-    id: "losses",
-    label: "Losses",
-    href: "/owner/losses",
-    icon: Trash2,
-  },
-  { type: "section", label: "More" },
-  {
-    type: "link",
-    id: "ai",
-    label: "AI Insights",
-    href: "/owner/ai",
-    icon: Sparkles,
-  },
-];
+import { ownerNav } from "./owner-nav-config";
 
 export function OwnerSidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="bg-navy sticky top-0 flex h-screen w-[244px] shrink-0 flex-col">
+    <aside className="bg-navy sticky top-0 hidden h-screen w-[244px] shrink-0 flex-col lg:flex">
       {/* Logo */}
       <div className="px-5 pt-[22px] pb-3.5">
         <Logo light />
@@ -126,7 +19,7 @@ export function OwnerSidebar() {
 
       {/* Nav items */}
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3">
-        {nav.map((item, i) => {
+        {ownerNav.map((item, i) => {
           if (item.type === "section") {
             return (
               <div
