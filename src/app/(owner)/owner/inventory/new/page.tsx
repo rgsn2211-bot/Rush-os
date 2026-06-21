@@ -1,8 +1,17 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/server";
+import { getAllSuppliers } from "@/services/suppliers";
 import { PageHeader } from "@/components/ui/page-header";
+import { InventoryItemForm } from "@/features/inventory/inventory-item-form";
 
-export default function NewInventoryItemPage() {
+export default async function NewInventoryItemPage() {
+  const db = await createClient();
+  const { data: { user } } = await db.auth.getUser();
+  if (!user) redirect("/login");
+
+  const suppliers = await getAllSuppliers(db);
+
   return (
     <div>
       <Link
@@ -15,12 +24,7 @@ export default function NewInventoryItemPage() {
         title="Add Inventory Item"
         subtitle="Start simple — fill in advanced settings later"
       />
-      <div className="text-ink-2 border-line rounded-[14px] border bg-white px-5 py-12 text-center text-sm">
-        <p>Inventory item form — coming next.</p>
-        <Link href="/owner/inventory" className="mt-4 inline-block">
-          <Button variant="secondary">Back to Inventory</Button>
-        </Link>
-      </div>
+      <InventoryItemForm suppliers={suppliers} />
     </div>
   );
 }

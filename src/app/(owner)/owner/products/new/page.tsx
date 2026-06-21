@@ -1,8 +1,17 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { createClient } from "@/lib/supabase/server";
+import { getAllItems } from "@/services/inventory";
 import { PageHeader } from "@/components/ui/page-header";
+import { ProductForm } from "@/features/products/product-form";
 
-export default function NewProductPage() {
+export default async function NewProductPage() {
+  const db = await createClient();
+  const { data: { user } } = await db.auth.getUser();
+  if (!user) redirect("/login");
+
+  const items = await getAllItems(db);
+
   return (
     <div>
       <Link
@@ -15,12 +24,7 @@ export default function NewProductPage() {
         title="Add Product"
         subtitle="Each size or hot/cold variant is a separate product"
       />
-      <div className="text-ink-2 border-line rounded-[14px] border bg-white px-5 py-12 text-center text-sm">
-        <p>Product form with recipe editor — coming next.</p>
-        <Link href="/owner/products" className="mt-4 inline-block">
-          <Button variant="secondary">Back to Products</Button>
-        </Link>
-      </div>
+      <ProductForm inventoryItems={items} />
     </div>
   );
 }

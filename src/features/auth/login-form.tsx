@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,6 +85,13 @@ export function LoginForm() {
           {loading ? "Signing in..." : "Sign In"}
         </Button>
       </form>
+
+      <p className="text-ink-3 mt-4 text-center text-sm">
+        First time?{" "}
+        <Link href="/signup" className="text-navy font-semibold hover:underline">
+          Create account
+        </Link>
+      </p>
     </div>
   );
 }
