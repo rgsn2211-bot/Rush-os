@@ -1,10 +1,10 @@
-export default function InventoryPage() {
-  return (
-    <div>
-      <h1 className="text-ink text-2xl font-bold">Inventory</h1>
-      <p className="text-ink-2 mt-2">
-        Inventory management — coming in Phase 1.
-      </p>
-    </div>
-  );
+import { createClient } from "@/lib/supabase/server";
+import { getAllItems } from "@/services/inventory";
+import { InventoryList } from "@/features/inventory/inventory-list";
+
+export default async function InventoryPage() {
+  const db = await createClient();
+  const items = await getAllItems(db);
+
+  return <InventoryList items={items} />;
 }

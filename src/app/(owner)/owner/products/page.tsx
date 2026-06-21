@@ -1,10 +1,10 @@
-export default function ProductCostingPage() {
-  return (
-    <div>
-      <h1 className="text-ink text-2xl font-bold">Product Costing</h1>
-      <p className="text-ink-2 mt-2">
-        Recipe-based product costs — coming in Phase 1.
-      </p>
-    </div>
-  );
+import { createClient } from "@/lib/supabase/server";
+import { getAllProducts } from "@/services/products";
+import { ProductsList } from "@/features/products/products-list";
+
+export default async function ProductCostingPage() {
+  const db = await createClient();
+  const products = await getAllProducts(db);
+
+  return <ProductsList products={products} />;
 }
