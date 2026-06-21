@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getAllProducts } from "@/services/products";
+import { getAllProductsWithCosts } from "@/services/products";
 import { ProductsList } from "@/features/products/products-list";
 
 export default async function ProductCostingPage() {
@@ -8,6 +8,6 @@ export default async function ProductCostingPage() {
   const { data: { user } } = await db.auth.getUser();
   if (!user) redirect("/login");
 
-  const products = await getAllProducts(db);
+  const products = await getAllProductsWithCosts(db);
   return <ProductsList products={products} />;
 }

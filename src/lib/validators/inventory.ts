@@ -18,10 +18,14 @@ export const supplierCreateSchema = z.object({
 });
 export type SupplierCreateInput = z.infer<typeof supplierCreateSchema>;
 
+export const costingMethodSchema = z.enum(["weighted_average", "fixed"]);
+
 export const inventoryItemCreateSchema = z.object({
   name: z.string().trim().min(1, "Item name is required"),
   category: z.string().trim().optional(),
   baseUnit: z.string().trim().min(1, "Base unit is required"),
+  stockUnit: z.string().trim().min(1, "Stock unit is required"),
+  basePerStock: positive.default(1),
   purchaseUnit: z.string().trim().min(1, "Purchase unit is required"),
   unitsPerPurchase: positive,
   expiry: expiryModeSchema.default("not_needed"),
@@ -32,6 +36,8 @@ export const inventoryItemCreateSchema = z.object({
   maxBaseQty: z.number().nonnegative().optional(),
   safetyDays: z.number().int().nonnegative().default(0),
   supplierId: z.string().uuid().optional(),
+  defaultCostFils: fils.default(0),
+  costingMethod: costingMethodSchema.default("weighted_average"),
 });
 export type InventoryItemCreateInput = z.infer<
   typeof inventoryItemCreateSchema

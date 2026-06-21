@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { InventoryItem } from "@/types/inventory";
 import { formatFils } from "@/lib/calculations/currency";
-import { averageUnitCostFils } from "@/lib/calculations/costing";
+import { effectiveUnitCostFils } from "@/lib/calculations/costing";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ interface InventoryListProps {
 }
 
 export function InventoryList({ items }: InventoryListProps) {
+  const router = useRouter();
   const [search, setSearch] = useState("");
 
   const filtered = items.filter(
@@ -51,10 +53,11 @@ export function InventoryList({ items }: InventoryListProps) {
       header: "Avg cost",
       align: "right",
       cell: (r) => {
-        const avg = averageUnitCostFils({
-          baseQty: r.stockBaseQty,
-          valueFils: r.stockValueFils,
-        });
+        const avg = effectiveUnitCostFils(
+          { baseQty: r.stockBaseQty, valueFils: r.stockValueFils },
+          r.costingMethod,
+          r.defaultCostFils,
+        );
         return (
           <span className="text-ink-2 font-mono">
             {avg > 0 ? formatFils(Math.round(avg)) : "—"}
@@ -126,7 +129,7 @@ export function InventoryList({ items }: InventoryListProps) {
           <DataTable
             columns={columns}
             rows={filtered}
-            onRowClick={() => {}}
+            onRowClick={(item) => router.push(`/owner/inventory/${item.id}`)}
           />
         </Card>
       )}

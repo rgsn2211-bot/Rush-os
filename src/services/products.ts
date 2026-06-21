@@ -14,7 +14,7 @@ import { listInventoryItems } from "@/repositories/inventory-items";
 import {
   recipeCostFils,
   grossMargin,
-  averageUnitCostFils,
+  effectiveUnitCostFils,
 } from "@/lib/calculations/costing";
 
 export interface ProductWithCost extends Product {
@@ -28,6 +28,42 @@ export async function getAllProducts(
   db: SupabaseClient,
 ): Promise<Product[]> {
   return listProducts(db);
+}
+
+export async function getAllProductsWithCosts(
+  db: SupabaseClient,
+): Promise<ProductWithCost[]> {
+  const products = await listProducts(db);
+  const items = await listInventoryItems(db);
+  const itemMap = new Map(items.map((i) => [i.id, i]));
+
+  const results: ProductWithCost[] = [];
+  for (const product of products) {
+    const recipe = await getRecipeIngredients(db, product.id);
+    const ingredientCosts = recipe.map((r) => {
+      const item = itemMap.get(r.inventoryItemId);
+      return {
+        qtyBase: r.qtyBase,
+        unitCostFils: item
+          ? effectiveUnitCostFils(
+              { baseQty: item.stockBaseQty, valueFils: item.stockValueFils },
+              item.costingMethod,
+              item.defaultCostFils,
+            )
+          : 0,
+      };
+    });
+    const costFils = recipeCostFils(ingredientCosts);
+    const margin = grossMargin(product.priceFils, costFils);
+    results.push({
+      ...product,
+      recipe,
+      costFils,
+      marginFils: margin.marginFils,
+      marginPct: margin.marginPct,
+    });
+  }
+  return results;
 }
 
 export async function getProductWithCost(
@@ -46,10 +82,11 @@ export async function getProductWithCost(
     return {
       qtyBase: r.qtyBase,
       unitCostFils: item
-        ? averageUnitCostFils({
-            baseQty: item.stockBaseQty,
-            valueFils: item.stockValueFils,
-          })
+        ? effectiveUnitCostFils(
+            { baseQty: item.stockBaseQty, valueFils: item.stockValueFils },
+            item.costingMethod,
+            item.defaultCostFils,
+          )
         : 0,
     };
   });
@@ -120,10 +157,11 @@ export async function buildCostBreakdown(
 
   const ingredients = recipe.map((r) => {
     const item = itemMap.get(r.inventoryItemId)!;
-    const unitCost = averageUnitCostFils({
-      baseQty: item.stockBaseQty,
-      valueFils: item.stockValueFils,
-    });
+    const unitCost = effectiveUnitCostFils(
+      { baseQty: item.stockBaseQty, valueFils: item.stockValueFils },
+      item.costingMethod,
+      item.defaultCostFils,
+    );
     return {
       item,
       qtyBase: r.qtyBase,

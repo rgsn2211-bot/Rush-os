@@ -41,6 +41,8 @@ export async function insertInventoryItem(
       name: input.name,
       category: input.category ?? null,
       base_unit: input.baseUnit,
+      stock_unit: input.stockUnit,
+      base_per_stock: input.basePerStock,
       purchase_unit: input.purchaseUnit,
       units_per_purchase: input.unitsPerPurchase,
       expiry: input.expiry,
@@ -51,6 +53,8 @@ export async function insertInventoryItem(
       max_base_qty: input.maxBaseQty ?? null,
       safety_days: input.safetyDays,
       supplier_id: input.supplierId ?? null,
+      default_cost_fils: input.defaultCostFils,
+      costing_method: input.costingMethod,
       created_by: createdBy,
     })
     .select("*")
@@ -69,6 +73,8 @@ export async function updateInventoryItem(
   if (input.name !== undefined) updates.name = input.name;
   if (input.category !== undefined) updates.category = input.category ?? null;
   if (input.baseUnit !== undefined) updates.base_unit = input.baseUnit;
+  if (input.stockUnit !== undefined) updates.stock_unit = input.stockUnit;
+  if (input.basePerStock !== undefined) updates.base_per_stock = input.basePerStock;
   if (input.purchaseUnit !== undefined) updates.purchase_unit = input.purchaseUnit;
   if (input.unitsPerPurchase !== undefined) updates.units_per_purchase = input.unitsPerPurchase;
   if (input.expiry !== undefined) updates.expiry = input.expiry;
@@ -79,6 +85,8 @@ export async function updateInventoryItem(
   if (input.maxBaseQty !== undefined) updates.max_base_qty = input.maxBaseQty ?? null;
   if (input.safetyDays !== undefined) updates.safety_days = input.safetyDays;
   if (input.supplierId !== undefined) updates.supplier_id = input.supplierId ?? null;
+  if (input.defaultCostFils !== undefined) updates.default_cost_fils = input.defaultCostFils;
+  if (input.costingMethod !== undefined) updates.costing_method = input.costingMethod;
 
   const { data, error } = await db
     .from("inventory_items")
@@ -127,6 +135,8 @@ function toInventoryItem(row: any): InventoryItem {
     name: row.name,
     category: row.category,
     baseUnit: row.base_unit,
+    stockUnit: row.stock_unit,
+    basePerStock: Number(row.base_per_stock),
     purchaseUnit: row.purchase_unit,
     unitsPerPurchase: Number(row.units_per_purchase),
     expiry: row.expiry,
@@ -139,6 +149,8 @@ function toInventoryItem(row: any): InventoryItem {
     supplierId: row.supplier_id,
     stockBaseQty: Number(row.stock_base_qty),
     stockValueFils: Number(row.stock_value_fils),
+    defaultCostFils: Number(row.default_cost_fils),
+    costingMethod: row.costing_method,
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

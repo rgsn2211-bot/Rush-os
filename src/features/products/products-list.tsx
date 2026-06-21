@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Product } from "@/types/inventory";
 import { formatFils } from "@/lib/calculations/currency";
@@ -21,6 +22,7 @@ interface ProductsListProps {
 }
 
 export function ProductsList({ products }: ProductsListProps) {
+  const router = useRouter();
   const [search, setSearch] = useState("");
 
   const filtered = products.filter(
@@ -121,7 +123,7 @@ export function ProductsList({ products }: ProductsListProps) {
           <DataTable
             columns={columns}
             rows={filtered}
-            onRowClick={() => {}}
+            onRowClick={(p) => router.push(`/owner/products/${p.id}`)}
           />
         </Card>
       )}

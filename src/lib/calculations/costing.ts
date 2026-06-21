@@ -103,6 +103,24 @@ export function consumeStock(
   };
 }
 
+export type CostingMethod = "weighted_average" | "fixed";
+
+/**
+ * The unit cost to use for an item, respecting its costing method.
+ * - fixed: always uses defaultCostFils
+ * - weighted_average: uses the live average, falling back to defaultCostFils
+ *   when there is no stock on hand
+ */
+export function effectiveUnitCostFils(
+  state: StockState,
+  costingMethod: CostingMethod,
+  defaultCostFils: number,
+): number {
+  if (costingMethod === "fixed") return defaultCostFils;
+  const avg = averageUnitCostFils(state);
+  return avg > 0 ? avg : defaultCostFils;
+}
+
 export interface RecipeIngredientCost {
   /** Quantity the recipe uses, in the ingredient's base unit. */
   qtyBase: number;

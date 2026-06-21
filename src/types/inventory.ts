@@ -8,6 +8,7 @@
  */
 
 export type ExpiryMode = "required" | "optional" | "not_needed";
+export type CostingMethod = "weighted_average" | "fixed";
 export type ReviewStatus = "approved" | "needs_review" | "voided";
 export type UserRole = "owner" | "worker";
 
@@ -26,6 +27,8 @@ export interface InventoryItem {
   name: string;
   category: string | null;
   baseUnit: string;
+  stockUnit: string;
+  basePerStock: number;
   purchaseUnit: string;
   unitsPerPurchase: number;
   expiry: ExpiryMode;
@@ -39,6 +42,8 @@ export interface InventoryItem {
   stockBaseQty: number;
   /** Total value of stock on hand, in fils. Owner-only. */
   stockValueFils: number;
+  defaultCostFils: number;
+  costingMethod: CostingMethod;
   status: ReviewStatus;
   createdAt: string;
   updatedAt: string;

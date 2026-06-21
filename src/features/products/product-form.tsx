@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { InventoryItem } from "@/types/inventory";
-import { formatFils, bhdToFils } from "@/lib/calculations/currency";
-import { averageUnitCostFils } from "@/lib/calculations/costing";
+import type { InventoryItem, Product, RecipeIngredient } from "@/types/inventory";
+import { formatFils, bhdToFils, filsToBhd } from "@/lib/calculations/currency";
+import { effectiveUnitCostFils } from "@/lib/calculations/costing";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,17 +21,44 @@ interface RecipeLine {
 
 interface ProductFormProps {
   inventoryItems: InventoryItem[];
+  product?: Product;
+  existingRecipe?: RecipeIngredient[];
 }
 
-export function ProductForm({ inventoryItems }: ProductFormProps) {
+export function ProductForm({
+  inventoryItems,
+  product,
+  existingRecipe,
+}: ProductFormProps) {
   const router = useRouter();
+  const isEdit = !!product;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [name, setName] = useState("");
-  const [category, setCategory] = useState("");
-  const [priceBhd, setPriceBhd] = useState("");
-  const [recipe, setRecipe] = useState<RecipeLine[]>([]);
+  const [name, setName] = useState(product?.name ?? "");
+  const [category, setCategory] = useState(product?.category ?? "");
+  const [priceBhd, setPriceBhd] = useState(
+    product ? String(filsToBhd(product.priceFils)) : "",
+  );
+
+  const initialRecipe: RecipeLine[] = (existingRecipe ?? []).map((r) => {
+    const item = inventoryItems.find((i) => i.id === r.inventoryItemId);
+    return {
+      inventoryItemId: r.inventoryItemId,
+      name: item?.name ?? "Unknown",
+      baseUnit: item?.baseUnit ?? "",
+      qtyBase: r.qtyBase,
+      unitCostFils: item
+        ? effectiveUnitCostFils(
+            { baseQty: item.stockBaseQty, valueFils: item.stockValueFils },
+            item.costingMethod,
+            item.defaultCostFils,
+          )
+        : 0,
+    };
+  });
+
+  const [recipe, setRecipe] = useState<RecipeLine[]>(initialRecipe);
   const [showItemPicker, setShowItemPicker] = useState(false);
 
   const priceFils = bhdToFils(Number(priceBhd) || 0);
@@ -45,10 +72,11 @@ export function ProductForm({ inventoryItems }: ProductFormProps) {
   function addIngredient(item: InventoryItem) {
     if (recipe.some((r) => r.inventoryItemId === item.id)) return;
 
-    const unitCost = averageUnitCostFils({
-      baseQty: item.stockBaseQty,
-      valueFils: item.stockValueFils,
-    });
+    const unitCost = effectiveUnitCostFils(
+      { baseQty: item.stockBaseQty, valueFils: item.stockValueFils },
+      item.costingMethod,
+      item.defaultCostFils,
+    );
 
     setRecipe([
       ...recipe,
@@ -86,20 +114,30 @@ export function ProductForm({ inventoryItems }: ProductFormProps) {
       })),
     };
 
-    const res = await fetch("/api/products", {
-      method: "POST",
+    const url = isEdit ? `/api/products/${product.id}` : "/api/products";
+    const method = isEdit ? "PATCH" : "POST";
+
+    const res = await fetch(url, {
+      method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
 
     if (!res.ok) {
       const data = await res.json();
-      setError(data.error?.formErrors?.[0] || "Failed to create product");
+      setError(
+        data.error?.formErrors?.[0] ||
+          `Failed to ${isEdit ? "update" : "create"} product`,
+      );
       setLoading(false);
       return;
     }
 
-    router.push("/owner/products");
+    if (isEdit) {
+      router.push(`/owner/products/${product.id}`);
+    } else {
+      router.push("/owner/products");
+    }
     router.refresh();
   }
 
@@ -221,7 +259,10 @@ export function ProductForm({ inventoryItems }: ProductFormProps) {
                     {recipe.map((r, i) => {
                       const lineCost = Math.round(r.qtyBase * r.unitCostFils);
                       return (
-                        <tr key={r.inventoryItemId} className="border-line-2 border-b">
+                        <tr
+                          key={r.inventoryItemId}
+                          className="border-line-2 border-b"
+                        >
                           <td className="px-5 py-3 font-semibold">{r.name}</td>
                           <td className="px-5 py-3 text-right">
                             <input
@@ -314,15 +355,33 @@ export function ProductForm({ inventoryItems }: ProductFormProps) {
               </div>
             )}
 
-            <Button type="submit" full size="lg" className="mt-5" disabled={loading}>
-              {loading ? "Creating..." : "Create Product"}
+            <Button
+              type="submit"
+              full
+              size="lg"
+              className="mt-5"
+              disabled={loading}
+            >
+              {loading
+                ? isEdit
+                  ? "Saving..."
+                  : "Creating..."
+                : isEdit
+                  ? "Save Changes"
+                  : "Create Product"}
             </Button>
             <Button
               type="button"
               variant="ghost"
               full
               className="mt-2"
-              onClick={() => router.push("/owner/products")}
+              onClick={() =>
+                router.push(
+                  isEdit
+                    ? `/owner/products/${product.id}`
+                    : "/owner/products",
+                )
+              }
             >
               Cancel
             </Button>
