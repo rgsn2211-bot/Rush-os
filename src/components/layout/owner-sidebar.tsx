@@ -1,14 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Settings, User } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { LogOut, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
 import { Logo } from "./logo";
 import { ownerNav } from "./owner-nav-config";
 
 export function OwnerSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  async function handleSignOut() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  }
 
   return (
     <aside className="bg-navy sticky top-0 hidden h-screen w-[244px] shrink-0 flex-col lg:flex">
@@ -77,7 +86,9 @@ export function OwnerSidebar() {
             </div>
             <div className="text-[11.5px] text-white/55">Rush OS</div>
           </div>
-          <Settings size={18} className="shrink-0 text-white/55" />
+          <button onClick={handleSignOut} title="Sign out">
+            <LogOut size={18} className="shrink-0 text-white/55 hover:text-white" />
+          </button>
         </div>
       </div>
     </aside>
