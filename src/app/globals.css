@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+/*
+  Rush OS design tokens — ported 1:1 from the Claude Design prototype (ui.jsx).
+  Money and numbers use IBM Plex Mono; everything else uses IBM Plex Sans.
+  Do not invent new colors here — extend the prototype palette deliberately.
+*/
+@theme inline {
+  /* Brand */
+  --color-navy: #1e3a63;
+  --color-navy-2: #25456f;
+  --color-navy-soft: #2e5183;
+
+  /* Surfaces */
+  --color-bg: #f9f9f9;
+  --color-card: #ffffff;
+  --color-line: #e8eaed;
+  --color-line-2: #eff1f3;
+
+  /* Ink (text) */
+  --color-ink: #1a1f26;
+  --color-ink-2: #4a525c;
+  --color-ink-3: #8a929c;
+
+  /* Semantic */
+  --color-rush-green: oklch(0.62 0.12 150);
+  --color-rush-green-bg: oklch(0.96 0.03 150);
+  --color-rush-amber: oklch(0.72 0.12 75);
+  --color-rush-amber-bg: oklch(0.96 0.04 75);
+  --color-rush-red: oklch(0.6 0.13 25);
+  --color-rush-red-bg: oklch(0.96 0.04 25);
+  --color-rush-blue: oklch(0.6 0.1 245);
+  --color-rush-blue-bg: oklch(0.96 0.03 245);
+
+  /* Type */
+  --font-sans: var(--font-plex-sans), system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Numbers, money, and tabular data read best in mono with aligned figures. */
+.font-mono,
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

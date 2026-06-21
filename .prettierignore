@@ -1,0 +1,6 @@
+.next
+node_modules
+package-lock.json
+docs/design/prototype
+supabase/.branches
+supabase/.temp

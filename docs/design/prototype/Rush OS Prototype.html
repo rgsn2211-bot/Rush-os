@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Rush OS — Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: 'IBM Plex Sans', system-ui, sans-serif; -webkit-font-smoothing: antialiased; background: #ECEEF1; }
+  button { font-family: inherit; }
+  ::selection { background: rgba(30,58,99,0.16); }
+  /* scrollbars */
+  .rush-tablet-screen::-webkit-scrollbar { width: 0; }
+  *::-webkit-scrollbar { width: 9px; height: 9px; }
+  *::-webkit-scrollbar-thumb { background: #cfd4da; border-radius: 999px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  .rush-btn:hover { filter: brightness(0.95); }
+  .rush-btn:active { transform: translateY(1px); }
+  .rush-row:hover { background: #FAFBFC; }
+  select { font-family: 'IBM Plex Sans', sans-serif; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script src="data.js"></script>
+<script src="data2.js"></script>
+<script src="data3.js"></script>
+<script type="text/babel" src="icons.jsx"></script>
+<script type="text/babel" src="ui.jsx"></script>
+<script type="text/babel" src="components.jsx"></script>
+<script type="text/babel" src="invShared.jsx"></script>
+<script type="text/babel" src="worker.jsx"></script>
+<script type="text/babel" src="worker2.jsx"></script>
+<script type="text/babel" src="worker3.jsx"></script>
+<script type="text/babel" src="owner.jsx"></script>
+<script type="text/babel" src="ownerInv.jsx"></script>
+<script type="text/babel" src="inventory.jsx"></script>
+<script type="text/babel" src="inventoryDetail.jsx"></script>
+<script type="text/babel" src="inventoryReview.jsx"></script>
+<script type="text/babel" src="ownerMoney.jsx"></script>
+<script type="text/babel" src="ownerFin.jsx"></script>
+<script type="text/babel" src="ownerReview.jsx"></script>
+<script type="text/babel" src="ownerShell.jsx"></script>
+<script type="text/babel" src="ownerMobile.jsx"></script>
+<script type="text/babel" src="main.jsx"></script>
+</body>
+</html>
