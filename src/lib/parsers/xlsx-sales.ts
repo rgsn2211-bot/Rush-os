@@ -1,3 +1,4 @@
+import "server-only";
 import * as XLSX from "xlsx";
 import { bhdToFils } from "@/lib/calculations/currency";
 

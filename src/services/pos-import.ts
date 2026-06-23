@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { PosSalesRow } from "@/types/pos";
+import type { PosImport, PosImportSummary, PosSalesRow } from "@/types/pos";
 import { parseSalesByItemXlsx } from "@/lib/parsers/xlsx-sales";
 import {
   insertPosImport,
