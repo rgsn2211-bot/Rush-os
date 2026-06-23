@@ -10,13 +10,21 @@ import {
 } from "./costing";
 
 describe("unit conversion", () => {
-  it("converts purchase units to base units", () => {
-    expect(purchaseToBaseQty(2, 12)).toBe(24); // 2 cases x 12 L
-    expect(purchaseToBaseQty(1, 1000)).toBe(1000); // 1 kg -> 1000 g
+  it("converts purchase units to base units (same stock & base unit)", () => {
+    expect(purchaseToBaseQty(2, 12)).toBe(24); // 2 cases x 12 L, basePerStock defaults to 1
+    expect(purchaseToBaseQty(1, 1000)).toBe(1000); // 1 case x 1000 units
+  });
+
+  it("applies basePerStock when stock and base units differ", () => {
+    // 2 bags, 25 kg/bag, 1000 g/kg -> 50 000 g
+    expect(purchaseToBaseQty(2, 25, 1000)).toBe(50000);
+    // 1 case of 6 bottles, 750 ml/bottle -> 4500 ml
+    expect(purchaseToBaseQty(1, 6, 750)).toBe(4500);
   });
 
   it("rejects a non-positive conversion factor", () => {
     expect(() => purchaseToBaseQty(1, 0)).toThrow();
+    expect(() => purchaseToBaseQty(1, 5, 0)).toThrow();
   });
 });
 

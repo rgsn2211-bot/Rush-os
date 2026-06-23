@@ -10,6 +10,8 @@ import {
   Gift,
   Trash2,
   Sparkles,
+  Users,
+  ShoppingCart,
 } from "lucide-react";
 
 export type OwnerNavLink = {
@@ -60,6 +62,20 @@ export const ownerNav: OwnerNavItem[] = [
     label: "Product Costing",
     href: "/owner/products",
     icon: Tag,
+  },
+  {
+    type: "link",
+    id: "purchases",
+    label: "Purchases",
+    href: "/owner/purchases",
+    icon: ShoppingCart,
+  },
+  {
+    type: "link",
+    id: "suppliers",
+    label: "Suppliers",
+    href: "/owner/suppliers",
+    icon: Users,
   },
   { type: "section", label: "Finance" },
   {

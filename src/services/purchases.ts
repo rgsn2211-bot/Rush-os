@@ -47,7 +47,11 @@ export async function recordPurchase(
       if (!item) {
         throw new Error(`Inventory item ${line.inventoryItemId} not found`);
       }
-      const baseQty = purchaseToBaseQty(line.purchaseQty, item.unitsPerPurchase);
+      const baseQty = purchaseToBaseQty(
+        line.purchaseQty,
+        item.unitsPerPurchase,
+        item.basePerStock,
+      );
       const lineTotalFils = Math.round(line.purchaseQty * line.unitCostFils);
       return { item, baseQty, lineTotalFils, line };
     }),

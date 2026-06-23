@@ -22,16 +22,28 @@ export interface StockState {
 
 /**
  * Convert a quantity expressed in purchase units into base units.
- * Example: 2 cases at 12 L/case -> 24 L.  (unitsPerPurchase must be > 0)
+ *
+ * Two conversion factors are involved because items are bought, stored, and
+ * costed in three different units:
+ *   - unitsPerPurchase : stock units per purchase unit (e.g. 25 kg per bag)
+ *   - basePerStock     : base units per stock unit     (e.g. 1000 g per kg)
+ *
+ * Example: 2 bags, 25 kg/bag, 1000 g/kg -> 2 * 25 * 1000 = 50 000 g.
+ * basePerStock defaults to 1 for items whose stock and base units are the same.
+ * Both factors must be > 0.
  */
 export function purchaseToBaseQty(
   purchaseQty: number,
   unitsPerPurchase: number,
+  basePerStock = 1,
 ): number {
   if (unitsPerPurchase <= 0) {
     throw new Error("unitsPerPurchase must be greater than 0");
   }
-  return purchaseQty * unitsPerPurchase;
+  if (basePerStock <= 0) {
+    throw new Error("basePerStock must be greater than 0");
+  }
+  return purchaseQty * unitsPerPurchase * basePerStock;
 }
 
 /**
