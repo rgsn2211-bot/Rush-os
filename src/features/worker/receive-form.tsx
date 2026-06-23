@@ -220,15 +220,13 @@ export function ReceiveForm({ inventoryItems, suppliers }: ReceiveFormProps) {
             <CardContent>
               <div className="mb-3 flex items-center justify-between">
                 <div className="text-navy text-sm font-bold">Item {i + 1}</div>
-                {lines.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removeLine(i)}
-                    className="text-rush-red text-[13px] font-semibold"
-                  >
-                    Remove
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => removeLine(i)}
+                  className="text-rush-red text-[13px] font-semibold"
+                >
+                  Remove
+                </button>
               </div>
 
               <div className="mb-3 text-[15px] font-semibold">{l.name}</div>

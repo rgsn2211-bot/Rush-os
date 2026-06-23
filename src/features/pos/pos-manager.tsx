@@ -37,6 +37,7 @@ export function PosManager({ catalog, products, imports }: PosManagerProps) {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [mappingItem, setMappingItem] = useState<number | null>(null);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
+  const [selectedUploadDate, setSelectedUploadDate] = useState<string | null>(null);
 
   const mapped = catalog.filter((c) => c.productId && !c.ignore);
   const unmapped = catalog.filter((c) => !c.productId && !c.ignore);
@@ -59,13 +60,17 @@ export function PosManager({ catalog, products, imports }: PosManagerProps) {
     const formData = new FormData();
     formData.append("file", file);
 
-    const res = await fetch("/api/pos/imports", { method: "POST", body: formData });
+    const url = selectedUploadDate
+      ? `/api/pos/imports?expectedDate=${selectedUploadDate}`
+      : "/api/pos/imports";
+    const res = await fetch(url, { method: "POST", body: formData });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       setUploadError(
         typeof data.error === "string" ? data.error : "Upload failed",
       );
     } else {
+      setSelectedUploadDate(null);
       router.refresh();
     }
 
@@ -272,10 +277,27 @@ export function PosManager({ catalog, products, imports }: PosManagerProps) {
       {/* Imports tab */}
       {tab === "imports" && (
         <div>
-          <PosUploadCalendar imports={imports} />
+          <PosUploadCalendar
+            imports={imports}
+            selectedDate={selectedUploadDate}
+            onSelectDate={setSelectedUploadDate}
+          />
 
           <Card className="mb-4">
             <CardContent>
+              {selectedUploadDate && (
+                <div className="mb-3 flex items-center justify-between rounded-lg bg-blue-50 px-4 py-2.5">
+                  <span className="text-navy text-sm font-semibold">
+                    Upload for: {new Date(selectedUploadDate + "T00:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                  </span>
+                  <button
+                    onClick={() => setSelectedUploadDate(null)}
+                    className="text-ink-3 text-xs font-semibold hover:text-ink-2"
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
               <label className="flex cursor-pointer flex-col items-center gap-3 rounded-xl border-2 border-dashed border-gray-200 px-6 py-8 transition-colors hover:border-gray-300">
                 <Upload
                   size={32}
@@ -286,10 +308,14 @@ export function PosManager({ catalog, products, imports }: PosManagerProps) {
                   <div className="text-sm font-semibold">
                     {uploading
                       ? "Uploading..."
-                      : "Upload Sales By Item XLSX"}
+                      : selectedUploadDate
+                        ? "Select XLSX file for this date"
+                        : "Upload Sales By Item XLSX"}
                   </div>
                   <div className="text-ink-3 mt-1 text-xs">
-                    Daily export from POS system
+                    {selectedUploadDate
+                      ? "File date must match selected date"
+                      : "Daily export from POS system"}
                   </div>
                 </div>
                 <input

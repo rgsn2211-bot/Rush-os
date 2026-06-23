@@ -64,6 +64,7 @@ export interface ComplimentaryLog {
   amountFils: number;
   reason: string;
   notes: string | null;
+  productId: string | null;
   occurredAt: string;
   status: string;
   createdBy: string | null;

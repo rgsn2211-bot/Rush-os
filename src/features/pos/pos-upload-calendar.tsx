@@ -8,6 +8,8 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface PosUploadCalendarProps {
   imports: PosImport[];
+  selectedDate: string | null;
+  onSelectDate: (date: string | null) => void;
 }
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -20,7 +22,7 @@ function toDateKey(year: number, month: number, day: number): string {
   return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-export function PosUploadCalendar({ imports }: PosUploadCalendarProps) {
+export function PosUploadCalendar({ imports, selectedDate, onSelectDate }: PosUploadCalendarProps) {
   const router = useRouter();
   const now = new Date();
   const [viewYear, setViewYear] = useState(now.getFullYear());
@@ -71,6 +73,15 @@ export function PosUploadCalendar({ imports }: PosUploadCalendarProps) {
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
   while (cells.length % 7 !== 0) cells.push(null);
 
+  function handleDayClick(dateKey: string) {
+    const imp = importsByDate.get(dateKey);
+    if (imp) {
+      router.push(`/owner/pos/${imp.id}`);
+    } else {
+      onSelectDate(selectedDate === dateKey ? null : dateKey);
+    }
+  }
+
   return (
     <Card className="mb-4">
       <CardContent>
@@ -110,17 +121,31 @@ export function PosUploadCalendar({ imports }: PosUploadCalendarProps) {
             const dateKey = toDateKey(viewYear, viewMonth, day);
             const imp = importsByDate.get(dateKey);
             const isToday = dateKey === todayKey;
+            const isFuture = dateKey > todayKey;
+            const isSelected = dateKey === selectedDate;
+
+            if (isFuture) {
+              return (
+                <div
+                  key={dateKey}
+                  className="flex h-10 items-center justify-center rounded-lg text-xs font-medium text-gray-300"
+                >
+                  {day}
+                </div>
+              );
+            }
 
             return (
               <button
                 key={dateKey}
-                onClick={() => imp && router.push(`/owner/pos/${imp.id}`)}
-                disabled={!imp}
+                onClick={() => handleDayClick(dateKey)}
                 className={`relative flex h-10 items-center justify-center rounded-lg text-xs font-medium transition-colors ${
                   imp
                     ? `cursor-pointer ${cellBg(imp)}`
-                    : "cursor-default text-ink-3"
-                } ${isToday ? "ring-navy ring-1 ring-inset" : ""}`}
+                    : isSelected
+                      ? "cursor-pointer border-2 border-dashed border-navy bg-blue-50 text-navy"
+                      : "cursor-pointer text-ink-3 hover:bg-gray-50"
+                } ${isToday && !isSelected ? "ring-navy ring-1 ring-inset" : ""}`}
               >
                 {day}
                 {imp && (

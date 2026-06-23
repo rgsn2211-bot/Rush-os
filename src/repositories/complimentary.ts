@@ -9,6 +9,7 @@ export interface InsertComplimentaryLogInput {
   amountFils: number;
   reason: string;
   notes?: string;
+  productId?: string;
   createdBy: string;
 }
 
@@ -23,6 +24,7 @@ export async function insertComplimentaryLog(
       amount_fils: input.amountFils,
       reason: input.reason,
       notes: input.notes ?? null,
+      product_id: input.productId ?? null,
       created_by: input.createdBy,
       status: "needs_review",
     })
@@ -99,6 +101,24 @@ export async function listPendingComplimentaryLogs(
   }));
 }
 
+export async function listWorkerTodayLogs(
+  db: SupabaseClient,
+  userId: string,
+): Promise<ComplimentaryLog[]> {
+  const today = new Date().toISOString().split("T")[0];
+  const { data, error } = await db
+    .from("complimentary_logs")
+    .select("*")
+    .eq("created_by", userId)
+    .gte("occurred_at", `${today}T00:00:00`)
+    .lt("occurred_at", `${today}T23:59:59.999`)
+    .neq("status", "voided")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data.map(toComplimentaryLog);
+}
+
 export async function getComplimentaryLog(
   db: SupabaseClient,
   id: string,
@@ -132,6 +152,18 @@ export async function updateComplimentaryStatus(
   if (error) throw error;
 }
 
+export async function deleteComplimentaryLog(
+  db: SupabaseClient,
+  id: string,
+): Promise<void> {
+  const { error } = await db
+    .from("complimentary_logs")
+    .delete()
+    .eq("id", id);
+
+  if (error) throw error;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toComplimentaryLog(row: any): ComplimentaryLog {
   return {
@@ -140,6 +172,7 @@ function toComplimentaryLog(row: any): ComplimentaryLog {
     amountFils: Number(row.amount_fils),
     reason: row.reason,
     notes: row.notes,
+    productId: row.product_id,
     occurredAt: row.occurred_at,
     status: row.status,
     createdBy: row.created_by,

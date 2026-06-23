@@ -28,13 +28,17 @@ export const COMPLIMENTARY_REASONS = [
 export type ComplimentaryReason = (typeof COMPLIMENTARY_REASONS)[number];
 
 export const complimentaryLogCreateSchema = z.object({
-  description: z.string().trim().min(1, "Description is required"),
+  productId: z.string().uuid().optional(),
+  description: z.string().trim().optional(),
   amountBhd: z
     .number()
     .positive("Amount must be greater than 0"),
   reason: z.enum(COMPLIMENTARY_REASONS),
   notes: z.string().trim().optional(),
-});
+}).refine(
+  (data) => data.productId || (data.description && data.description.length > 0),
+  { message: "Select a product or enter a description", path: ["description"] },
+);
 export type ComplimentaryLogCreateInput = z.infer<
   typeof complimentaryLogCreateSchema
 >;

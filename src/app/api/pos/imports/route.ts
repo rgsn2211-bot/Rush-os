@@ -16,6 +16,8 @@ export async function POST(request: NextRequest) {
   const db = await createClient();
   const authUser = await requireOwner(db);
 
+  const expectedDate = request.nextUrl.searchParams.get("expectedDate");
+
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
 
@@ -33,7 +35,13 @@ export async function POST(request: NextRequest) {
   const buffer = await file.arrayBuffer();
 
   try {
-    const result = await uploadSalesImport(db, buffer, file.name, authUser.id);
+    const result = await uploadSalesImport(
+      db,
+      buffer,
+      file.name,
+      authUser.id,
+      expectedDate ?? undefined,
+    );
     return Response.json(result, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Import failed";

@@ -38,6 +38,7 @@ export async function uploadSalesImport(
   fileBuffer: ArrayBuffer,
   fileName: string,
   uploadedBy: string,
+  expectedDate?: string,
 ): Promise<UploadResult> {
   const fileHash = await computeFileHash(fileBuffer);
 
@@ -49,6 +50,12 @@ export async function uploadSalesImport(
   }
 
   const parsed = parseSalesByItemXlsx(fileBuffer);
+
+  if (expectedDate && parsed.header.periodEnd !== expectedDate) {
+    throw new Error(
+      `Selected date is ${expectedDate} but this file is for ${parsed.header.periodEnd}. Upload the correct file or clear the date selection.`,
+    );
+  }
 
   const existingDate = await getPosImportByDateBranch(
     db,
