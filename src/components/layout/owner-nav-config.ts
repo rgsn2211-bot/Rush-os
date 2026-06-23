@@ -12,6 +12,7 @@ import {
   Sparkles,
   Users,
   ShoppingCart,
+  Upload,
 } from "lucide-react";
 
 export type OwnerNavLink = {
@@ -76,6 +77,13 @@ export const ownerNav: OwnerNavItem[] = [
     label: "Suppliers",
     href: "/owner/suppliers",
     icon: Users,
+  },
+  {
+    type: "link",
+    id: "pos",
+    label: "POS Manager",
+    href: "/owner/pos",
+    icon: Upload,
   },
   { type: "section", label: "Finance" },
   {
@@ -174,7 +182,8 @@ export function activeMobileTab(pathname: string): string {
   if (pathname.startsWith("/owner/alerts")) return "/owner/alerts";
   if (
     pathname.startsWith("/owner/inventory") ||
-    pathname.startsWith("/owner/products")
+    pathname.startsWith("/owner/products") ||
+    pathname.startsWith("/owner/pos")
   )
     return "/owner/inventory";
   if (pathname.startsWith("/owner/money")) return "/owner/money";

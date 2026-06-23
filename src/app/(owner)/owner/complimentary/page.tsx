@@ -1,10 +1,22 @@
-export default function ComplimentaryPage() {
+import { createClient } from "@/lib/supabase/server";
+import { requireOwner } from "@/lib/auth";
+import { getAllComplimentaryLogs } from "@/services/complimentary";
+import { PageHeader } from "@/components/ui/page-header";
+import { ComplimentaryList } from "@/features/complimentary/complimentary-list";
+
+export default async function ComplimentaryPage() {
+  const db = await createClient();
+  await requireOwner(db);
+
+  const logs = await getAllComplimentaryLogs(db);
+
   return (
     <div>
-      <h1 className="text-ink text-2xl font-bold">Complimentary</h1>
-      <p className="text-ink-2 mt-2">
-        Complimentary review and reports — coming in Phase 3.
-      </p>
+      <PageHeader
+        title="Complimentary"
+        subtitle="Review worker-submitted complimentary items"
+      />
+      <ComplimentaryList logs={logs} />
     </div>
   );
 }

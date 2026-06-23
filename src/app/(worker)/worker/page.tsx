@@ -13,6 +13,7 @@ import {
   Trash2,
   Banknote,
   ClipboardList,
+  Gift,
 } from "lucide-react";
 
 function greeting(): string {
@@ -41,6 +42,12 @@ export default async function WorkerHome() {
       desc: "Delivery or purchase received",
       icon: Package,
       href: "/worker/receive",
+    },
+    {
+      label: "Log Complimentary",
+      desc: "Record free items given out",
+      icon: Gift,
+      href: "/worker/complimentary",
     },
     {
       label: "Mark Item Opened",
