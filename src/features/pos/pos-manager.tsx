@@ -19,6 +19,7 @@ import {
   Check,
   Search,
 } from "lucide-react";
+import { PosUploadCalendar } from "@/features/pos/pos-upload-calendar";
 
 interface PosManagerProps {
   catalog: PosItemCatalogWithProduct[];
@@ -271,6 +272,8 @@ export function PosManager({ catalog, products, imports }: PosManagerProps) {
       {/* Imports tab */}
       {tab === "imports" && (
         <div>
+          <PosUploadCalendar imports={imports} />
+
           <Card className="mb-4">
             <CardContent>
               <label className="flex cursor-pointer flex-col items-center gap-3 rounded-xl border-2 border-dashed border-gray-200 px-6 py-8 transition-colors hover:border-gray-300">
@@ -298,8 +301,12 @@ export function PosManager({ catalog, products, imports }: PosManagerProps) {
                 />
               </label>
               {uploadError && (
-                <div className="bg-rush-red-bg text-rush-red mt-3 rounded-lg px-4 py-2.5 text-sm">
-                  {uploadError}
+                <div className="mt-3 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+                  <AlertTriangle size={18} className="text-rush-red mt-0.5 shrink-0" />
+                  <div>
+                    <div className="text-rush-red text-sm font-semibold">Upload failed</div>
+                    <p className="text-ink-2 mt-0.5 text-sm">{uploadError}</p>
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -353,8 +360,13 @@ export function PosManager({ catalog, products, imports }: PosManagerProps) {
                         </Button>
                       </div>
                     </div>
+                    {imp.status === "pending" && (
+                      <div className="text-ink-3 mt-1.5 text-xs">
+                        Has unmapped items — resolve in POS Items tab
+                      </div>
+                    )}
                     {imp.inventoryDeducted && (
-                      <div className="mt-2 flex items-center gap-1.5 text-xs text-green-600">
+                      <div className="mt-1.5 flex items-center gap-1.5 text-xs text-green-600">
                         <Check size={14} /> Inventory deducted
                       </div>
                     )}

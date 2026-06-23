@@ -7,7 +7,8 @@ import { formatFils } from "@/lib/calculations/currency";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Check, Trash2 } from "lucide-react";
+import { AlertTriangle, Check, Trash2 } from "lucide-react";
+import Link from "next/link";
 
 interface ImportDetailProps {
   posImport: PosImport;
@@ -148,6 +149,53 @@ export function PosImportDetail({
           </div>
         </CardContent>
       </Card>
+
+      {/* Guidance */}
+      {posImport.status === "pending" && (
+        <Card className="mb-4 border-amber-200 bg-amber-50">
+          <CardContent>
+            <div className="flex items-start gap-3">
+              <AlertTriangle size={20} className="mt-0.5 shrink-0 text-amber-500" />
+              <div>
+                <div className="text-sm font-semibold text-amber-800">
+                  This import cannot deduct inventory yet
+                </div>
+                <p className="mt-1 text-sm text-amber-700">
+                  {summary.unmappedCount > 0 && (
+                    <>{summary.unmappedCount} item{summary.unmappedCount !== 1 ? "s are" : " is"} unmapped. </>
+                  )}
+                  {summary.needsReviewCount > 0 && (
+                    <>{summary.needsReviewCount} item{summary.needsReviewCount !== 1 ? "s need" : " needs"} a recipe. </>
+                  )}
+                  Go to the{" "}
+                  <Link href="/owner/pos" className="font-semibold underline">
+                    POS Items tab
+                  </Link>{" "}
+                  to map or ignore them. The status will update automatically.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {posImport.status === "processed" && !posImport.inventoryDeducted && (
+        <Card className="mb-4 border-green-200 bg-green-50">
+          <CardContent>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <Check size={20} className="shrink-0 text-green-600" />
+                <div className="text-sm font-semibold text-green-800">
+                  All items resolved — ready to deduct inventory
+                </div>
+              </div>
+              <Button onClick={handleProcess} disabled={processing} size="sm">
+                {processing ? "Processing..." : "Deduct Inventory"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Actions */}
       {posImport.status !== "voided" && (

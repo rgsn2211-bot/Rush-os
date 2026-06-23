@@ -341,4 +341,47 @@ function toPosSalesRow(row: any): PosSalesRow {
   };
 }
 
+export async function getAffectedImportIds(
+  db: SupabaseClient,
+  posItemId: number,
+): Promise<string[]> {
+  const { data, error } = await db
+    .from("pos_sales_rows")
+    .select("import_id")
+    .eq("pos_item_id", posItemId);
+
+  if (error) throw error;
+
+  const pendingImports = await db
+    .from("pos_imports")
+    .select("id")
+    .in("status", ["pending", "processed"])
+    .eq("inventory_deducted", false);
+
+  if (pendingImports.error) throw pendingImports.error;
+
+  const eligibleIds = new Set(pendingImports.data.map((r: { id: string }) => r.id));
+  const ids = new Set(
+    data
+      .map((r: { import_id: string }) => r.import_id)
+      .filter((id: string) => eligibleIds.has(id)),
+  );
+  return [...ids];
+}
+
+export async function updateIgnoredSalesRowsByPosItemId(
+  db: SupabaseClient,
+  posItemId: number,
+  newStatus: string,
+  productId: string | null,
+): Promise<void> {
+  const { error } = await db
+    .from("pos_sales_rows")
+    .update({ status: newStatus, product_id: productId })
+    .eq("pos_item_id", posItemId)
+    .eq("status", "ignored");
+
+  if (error) throw error;
+}
+
 export { toPosImport, toPosSalesRow };

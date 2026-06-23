@@ -7,12 +7,27 @@ import {
   updatePosItemIgnore,
 } from "@/repositories/pos-catalog";
 import { updateProduct, getProduct, listProducts } from "@/repositories/products";
-import { updateAllSalesRowsByPosItemId } from "@/repositories/pos-imports";
+import {
+  updateAllSalesRowsByPosItemId,
+  updateIgnoredSalesRowsByPosItemId,
+  getAffectedImportIds,
+} from "@/repositories/pos-imports";
+import { recheckImportStatus } from "@/services/pos-import";
 
 export async function getPosItemCatalog(
   db: SupabaseClient,
 ): Promise<PosItemCatalogWithProduct[]> {
   return listPosItemCatalogWithProducts(db);
+}
+
+async function recheckAffectedImports(
+  db: SupabaseClient,
+  posItemId: number,
+): Promise<void> {
+  const importIds = await getAffectedImportIds(db, posItemId);
+  for (const importId of importIds) {
+    await recheckImportStatus(db, importId);
+  }
 }
 
 export async function mapPosItem(
@@ -39,6 +54,7 @@ export async function mapPosItem(
   await updateProduct(db, productId, { posItemId });
 
   await updateAllSalesRowsByPosItemId(db, posItemId, "mapped", productId);
+  await recheckAffectedImports(db, posItemId);
 }
 
 export async function unmapPosItem(
@@ -56,6 +72,7 @@ export async function unmapPosItem(
 
   await updatePosItemMapping(db, posItemId, null);
   await updateAllSalesRowsByPosItemId(db, posItemId, "unmapped", null);
+  await recheckAffectedImports(db, posItemId);
 }
 
 export async function ignorePosItem(
@@ -70,14 +87,16 @@ export async function ignorePosItem(
   } else {
     const catalogEntry = await getPosItemCatalogByPosId(db, posItemId);
     if (catalogEntry?.productId) {
-      await updateAllSalesRowsByPosItemId(
+      await updateIgnoredSalesRowsByPosItemId(
         db,
         posItemId,
         "mapped",
         catalogEntry.productId,
       );
     } else {
-      await updateAllSalesRowsByPosItemId(db, posItemId, "unmapped", null);
+      await updateIgnoredSalesRowsByPosItemId(db, posItemId, "unmapped", null);
     }
   }
+
+  await recheckAffectedImports(db, posItemId);
 }

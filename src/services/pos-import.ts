@@ -221,6 +221,24 @@ export async function processImportInventory(
   return { deductions, alreadyDeducted: false };
 }
 
+export async function recheckImportStatus(
+  db: SupabaseClient,
+  importId: string,
+): Promise<void> {
+  const posImport = await getPosImport(db, importId);
+  if (!posImport) return;
+  if (posImport.status === "voided" || posImport.status === "failed") return;
+  if (posImport.inventoryDeducted) return;
+
+  const summary = await getImportSummary(db, importId);
+  const hasIssues = summary.unmappedCount > 0 || summary.needsReviewCount > 0;
+  const newStatus = hasIssues ? "pending" : "processed";
+
+  if (posImport.status !== newStatus) {
+    await updatePosImportStatus(db, importId, newStatus);
+  }
+}
+
 export async function voidImport(
   db: SupabaseClient,
   importId: string,
