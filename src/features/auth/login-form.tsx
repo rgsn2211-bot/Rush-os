@@ -20,10 +20,8 @@ export function LoginForm() {
     setLoading(true);
 
     const supabase = createClient();
-    const { error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { data: authData, error: authError } =
+      await supabase.auth.signInWithPassword({ email, password });
 
     if (authError) {
       setError(authError.message);
@@ -31,7 +29,14 @@ export function LoginForm() {
       return;
     }
 
-    router.push("/owner");
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", authData.user.id)
+      .single();
+
+    const home = profile?.role === "worker" ? "/worker" : "/owner";
+    router.push(home);
     router.refresh();
   }
 
@@ -41,7 +46,7 @@ export function LoginForm() {
         Sign in to Rush OS
       </h1>
       <p className="text-ink-3 mt-1 text-center text-sm">
-        Owner login with email and password
+        Sign in with your email and password
       </p>
 
       <form onSubmit={handleSubmit} className="mt-6 space-y-4">

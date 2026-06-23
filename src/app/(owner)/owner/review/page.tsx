@@ -1,10 +1,26 @@
-export default function ReviewPage() {
+import { createClient } from "@/lib/supabase/server";
+import { requireOwner } from "@/lib/auth";
+import { getPendingPurchases } from "@/services/purchases";
+import { PageHeader } from "@/components/ui/page-header";
+import { ReviewList } from "@/features/reviews/review-list";
+
+export default async function ReviewPage() {
+  const db = await createClient();
+  await requireOwner(db);
+
+  const pending = await getPendingPurchases(db);
+
   return (
     <div>
-      <h1 className="text-ink text-2xl font-bold">Review Center</h1>
-      <p className="text-ink-2 mt-2">
-        Worker submissions and approvals — coming in Phase 2.
-      </p>
+      <PageHeader
+        title="Review Center"
+        subtitle={
+          pending.length > 0
+            ? `${pending.length} item${pending.length !== 1 ? "s" : ""} waiting for your decision`
+            : "All caught up"
+        }
+      />
+      <ReviewList purchases={pending} />
     </div>
   );
 }

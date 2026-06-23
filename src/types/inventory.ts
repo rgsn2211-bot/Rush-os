@@ -1,5 +1,5 @@
 /**
- * Domain types for Phase 1 entities.
+ * Domain types for Rush OS entities.
  *
  * These are the shapes the app code works with. They mirror the database schema
  * in supabase/migrations. Once the local database is running, the fully generated
@@ -77,6 +77,7 @@ export interface Purchase {
   totalFils: number;
   imagePath: string | null;
   status: ReviewStatus;
+  createdBy: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -91,3 +92,39 @@ export interface PurchaseItem {
   lineTotalFils: number;
   createdAt: string;
 }
+
+/** Cost-free view of an inventory item — what workers see. */
+export interface InventoryItemOps {
+  id: string;
+  name: string;
+  category: string | null;
+  baseUnit: string;
+  stockUnit: string;
+  basePerStock: number;
+  purchaseUnit: string;
+  unitsPerPurchase: number;
+  expiry: ExpiryMode;
+  tracksOpen: boolean;
+  shelfLifeDays: number | null;
+  openLifeDays: number | null;
+  minBaseQty: number;
+  maxBaseQty: number | null;
+  safetyDays: number;
+  supplierId: string | null;
+  stockBaseQty: number;
+  status: ReviewStatus;
+  createdAt: string;
+}
+
+export interface Profile {
+  id: string;
+  role: UserRole;
+  displayName: string | null;
+  createdAt: string;
+}
+
+export interface PurchaseWithSubmitter extends Purchase {
+  submitterName: string | null;
+}
+
+export type PurchaseMode = "supplier_delivery" | "cash_purchase";

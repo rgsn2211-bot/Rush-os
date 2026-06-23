@@ -1,13 +1,24 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Purchase, PurchaseItem } from "@/types/inventory";
-import type { PurchaseCreateInput } from "@/lib/validators/inventory";
+import type {
+  Purchase,
+  PurchaseItem,
+  PurchaseWithSubmitter,
+  ReviewStatus,
+} from "@/types/inventory";
+import type {
+  PurchaseCreateInput,
+  PurchaseApproveInput,
+} from "@/lib/validators/inventory";
 import {
   insertPurchase,
   insertPurchaseItems,
   listPurchases,
+  listPendingPurchases,
   getPurchase,
   getPurchaseItems,
   voidPurchase,
+  approvePurchaseRecord,
+  updatePurchaseItemCost,
 } from "@/repositories/purchases";
 import { getInventoryItem, adjustStock } from "@/repositories/inventory-items";
 import { purchaseToBaseQty, receiveStock } from "@/lib/calculations/costing";
@@ -29,17 +40,17 @@ export async function getPurchaseWithItems(
 }
 
 /**
- * Record a purchase and update stock for each item.
+ * Record a purchase and optionally update stock.
  *
- * For every line item:
- * 1. Convert purchase qty to base units using the item's unitsPerPurchase
- * 2. Calculate line total (purchaseQty * unitCostFils)
- * 3. Update the item's stock using weighted-average costing
+ * When status is 'approved' (owner-entered), stock is updated immediately.
+ * When status is 'needs_review' (worker submission), stock is NOT updated
+ * until the owner approves via approvePurchase().
  */
 export async function recordPurchase(
   db: SupabaseClient,
   input: PurchaseCreateInput,
   createdBy: string,
+  status: ReviewStatus = "approved",
 ): Promise<{ purchase: Purchase; items: PurchaseItem[] }> {
   const itemDetails = await Promise.all(
     input.items.map(async (line) => {
@@ -66,6 +77,7 @@ export async function recordPurchase(
     dueDate: input.dueDate ?? null,
     totalFils,
     createdBy,
+    status,
   });
 
   const purchaseItemInputs = itemDetails.map((d) => ({
@@ -79,19 +91,80 @@ export async function recordPurchase(
 
   const items = await insertPurchaseItems(db, purchaseItemInputs);
 
-  for (const d of itemDetails) {
-    const newStock = receiveStock(
-      {
-        baseQty: d.item.stockBaseQty,
-        valueFils: d.item.stockValueFils,
-      },
-      d.baseQty,
-      d.lineTotalFils,
-    );
-    await adjustStock(db, d.item.id, newStock.baseQty, newStock.valueFils);
+  if (status === "approved") {
+    for (const d of itemDetails) {
+      const newStock = receiveStock(
+        {
+          baseQty: d.item.stockBaseQty,
+          valueFils: d.item.stockValueFils,
+        },
+        d.baseQty,
+        d.lineTotalFils,
+      );
+      await adjustStock(db, d.item.id, newStock.baseQty, newStock.valueFils);
+    }
   }
 
   return { purchase, items };
+}
+
+export async function getPendingPurchases(
+  db: SupabaseClient,
+): Promise<PurchaseWithSubmitter[]> {
+  return listPendingPurchases(db);
+}
+
+export async function approvePurchase(
+  db: SupabaseClient,
+  purchaseId: string,
+  input: PurchaseApproveInput,
+): Promise<void> {
+  const existing = await getPurchaseWithItems(db, purchaseId);
+  if (!existing) throw new Error("Purchase not found");
+  if (existing.purchase.status !== "needs_review") {
+    throw new Error("Purchase is not pending review");
+  }
+
+  let totalFils = 0;
+
+  for (const entry of input.items) {
+    const pi = existing.items.find((i) => i.id === entry.purchaseItemId);
+    if (!pi) throw new Error(`Purchase item ${entry.purchaseItemId} not found`);
+
+    const lineTotalFils = Math.round(pi.purchaseQty * entry.unitCostFils);
+    totalFils += lineTotalFils;
+
+    await updatePurchaseItemCost(
+      db,
+      entry.purchaseItemId,
+      entry.unitCostFils,
+      lineTotalFils,
+    );
+
+    const item = await getInventoryItem(db, pi.inventoryItemId);
+    if (!item) continue;
+
+    const newStock = receiveStock(
+      { baseQty: item.stockBaseQty, valueFils: item.stockValueFils },
+      pi.baseQty,
+      lineTotalFils,
+    );
+    await adjustStock(db, item.id, newStock.baseQty, newStock.valueFils);
+  }
+
+  await approvePurchaseRecord(db, purchaseId, totalFils);
+}
+
+export async function rejectPurchase(
+  db: SupabaseClient,
+  purchaseId: string,
+): Promise<void> {
+  const existing = await getPurchase(db, purchaseId);
+  if (!existing) throw new Error("Purchase not found");
+  if (existing.status !== "needs_review") {
+    throw new Error("Purchase is not pending review");
+  }
+  await voidPurchase(db, purchaseId);
 }
 
 export async function cancelPurchase(

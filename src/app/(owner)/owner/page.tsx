@@ -1,9 +1,9 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { requireOwner } from "@/lib/auth";
 import { getAllItems } from "@/services/inventory";
 import { getAllProductsWithCosts } from "@/services/products";
-import { getAllSuppliers } from "@/services/suppliers";
+import { getPendingPurchases } from "@/services/purchases";
 import { formatFils } from "@/lib/calculations/currency";
 import { PageHeader } from "@/components/ui/page-header";
 import { MetricCard } from "@/components/ui/metric-card";
@@ -14,15 +14,12 @@ import { EmptyState } from "@/components/ui/empty-state";
 
 export default async function OwnerDashboard() {
   const db = await createClient();
-  const {
-    data: { user },
-  } = await db.auth.getUser();
-  if (!user) redirect("/login");
+  await requireOwner(db);
 
-  const [items, products, suppliers] = await Promise.all([
+  const [items, products, pendingReviews] = await Promise.all([
     getAllItems(db),
     getAllProductsWithCosts(db),
-    getAllSuppliers(db),
+    getPendingPurchases(db),
   ]);
 
   const totalValueFils = items.reduce((sum, i) => sum + i.stockValueFils, 0);
@@ -52,8 +49,16 @@ export default async function OwnerDashboard() {
           value={String(lowStock.length)}
           accent={lowStock.length > 0 ? "var(--color-rush-red)" : undefined}
         />
+        <Link href="/owner/review">
+          <MetricCard
+            label="Pending reviews"
+            value={String(pendingReviews.length)}
+            accent={
+              pendingReviews.length > 0 ? "var(--color-amber-500)" : undefined
+            }
+          />
+        </Link>
         <MetricCard label="Products" value={String(products.length)} />
-        <MetricCard label="Suppliers" value={String(suppliers.length)} />
       </div>
 
       <h2 className="text-ink mb-3 text-base font-bold">Low stock</h2>

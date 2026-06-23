@@ -1,5 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Purchase, PurchaseItem } from "@/types/inventory";
+import type {
+  Purchase,
+  PurchaseItem,
+  PurchaseWithSubmitter,
+  ReviewStatus,
+} from "@/types/inventory";
 
 export interface InsertPurchaseInput {
   supplierId: string | null;
@@ -8,6 +13,7 @@ export interface InsertPurchaseInput {
   dueDate: string | null;
   totalFils: number;
   createdBy: string;
+  status?: ReviewStatus;
 }
 
 export interface InsertPurchaseItemInput {
@@ -74,6 +80,7 @@ export async function insertPurchase(
       due_date: input.dueDate,
       total_fils: input.totalFils,
       created_by: input.createdBy,
+      ...(input.status ? { status: input.status } : {}),
     })
     .select("*")
     .single();
@@ -116,6 +123,57 @@ export async function voidPurchase(
   if (error) throw error;
 }
 
+export async function approvePurchaseRecord(
+  db: SupabaseClient,
+  id: string,
+  totalFils: number,
+): Promise<void> {
+  const { error } = await db
+    .from("purchases")
+    .update({ status: "approved", total_fils: totalFils })
+    .eq("id", id);
+
+  if (error) throw error;
+}
+
+export async function updatePurchaseItemCost(
+  db: SupabaseClient,
+  purchaseItemId: string,
+  unitCostFils: number,
+  lineTotalFils: number,
+): Promise<void> {
+  const { error } = await db
+    .from("purchase_items")
+    .update({
+      unit_cost_fils: unitCostFils,
+      line_total_fils: lineTotalFils,
+    })
+    .eq("id", purchaseItemId);
+
+  if (error) throw error;
+}
+
+export async function listPendingPurchases(
+  db: SupabaseClient,
+): Promise<PurchaseWithSubmitter[]> {
+  const { data, error } = await db
+    .from("purchases")
+    .select("*, profiles!purchases_created_by_fkey(display_name)")
+    .eq("status", "needs_review")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data.map(toPurchaseWithSubmitter);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toPurchaseWithSubmitter(row: any): PurchaseWithSubmitter {
+  return {
+    ...toPurchase(row),
+    submitterName: row.profiles?.display_name ?? null,
+  };
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toPurchase(row: any): Purchase {
   return {
@@ -127,6 +185,7 @@ function toPurchase(row: any): Purchase {
     totalFils: Number(row.total_fils),
     imagePath: row.image_path,
     status: row.status,
+    createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

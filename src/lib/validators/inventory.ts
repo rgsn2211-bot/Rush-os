@@ -71,3 +71,32 @@ export const purchaseCreateSchema = z.object({
   items: z.array(purchaseItemSchema).min(1, "Add at least one item"),
 });
 export type PurchaseCreateInput = z.infer<typeof purchaseCreateSchema>;
+
+export const workerPurchaseItemSchema = z.object({
+  inventoryItemId: z.string().uuid(),
+  purchaseQty: positive,
+  unitCostFils: fils.default(0),
+});
+
+export const workerPurchaseCreateSchema = z.object({
+  supplierId: z.string().uuid().optional(),
+  purchasedOn: z.string().date().optional(),
+  isPaid: z.boolean().default(false),
+  mode: z.enum(["supplier_delivery", "cash_purchase"]),
+  items: z.array(workerPurchaseItemSchema).min(1, "Add at least one item"),
+});
+export type WorkerPurchaseCreateInput = z.infer<
+  typeof workerPurchaseCreateSchema
+>;
+
+export const purchaseApproveItemSchema = z.object({
+  purchaseItemId: z.string().uuid(),
+  unitCostFils: fils,
+});
+
+export const purchaseApproveSchema = z.object({
+  items: z
+    .array(purchaseApproveItemSchema)
+    .min(1, "Cost entries are required"),
+});
+export type PurchaseApproveInput = z.infer<typeof purchaseApproveSchema>;

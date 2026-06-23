@@ -1,5 +1,11 @@
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
+import { requireWorker } from "@/lib/auth";
+import { listInventoryItemsOps } from "@/repositories/worker-inventory";
+import { countLowStock } from "@/services/alerts";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Bell,
   Package,
@@ -9,48 +15,67 @@ import {
   ClipboardList,
 } from "lucide-react";
 
-const actions = [
-  {
-    label: "Inventory Alerts",
-    desc: "Low, expiring & expired items",
-    icon: Bell,
-  },
-  {
-    label: "Record Supplier Purchase",
-    desc: "Delivery or purchase received",
-    icon: Package,
-  },
-  {
-    label: "Mark Item Opened",
-    desc: "Start after-opening use-by",
-    icon: Clock,
-  },
-  {
-    label: "Record Waste",
-    desc: "Log spoiled or damaged items",
-    icon: Trash2,
-  },
-  {
-    label: "Cash Out from Register",
-    desc: "Purchases, expenses, withdrawals",
-    icon: Banknote,
-  },
-  {
-    label: "Inventory Count",
-    desc: "Monthly full stock count",
-    icon: ClipboardList,
-  },
-];
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
+}
 
-export default function WorkerHome() {
+export default async function WorkerHome() {
+  const db = await createClient();
+  const authUser = await requireWorker(db);
+  const items = await listInventoryItemsOps(db);
+  const lowCount = countLowStock(items);
+
+  const actions = [
+    {
+      label: "Inventory Alerts",
+      desc: "Low, expiring & expired items",
+      icon: Bell,
+      href: "/worker/alerts",
+      badge: lowCount > 0 ? lowCount : undefined,
+    },
+    {
+      label: "Record Supplier Purchase",
+      desc: "Delivery or purchase received",
+      icon: Package,
+      href: "/worker/receive",
+    },
+    {
+      label: "Mark Item Opened",
+      desc: "Start after-opening use-by",
+      icon: Clock,
+      href: null,
+    },
+    {
+      label: "Record Waste",
+      desc: "Log spoiled or damaged items",
+      icon: Trash2,
+      href: null,
+    },
+    {
+      label: "Cash Out from Register",
+      desc: "Purchases, expenses, withdrawals",
+      icon: Banknote,
+      href: null,
+    },
+    {
+      label: "Inventory Count",
+      desc: "Monthly full stock count",
+      icon: ClipboardList,
+      href: null,
+    },
+  ];
+
   return (
     <div>
       <div className="mb-[18px]">
         <h1 className="text-ink text-2xl font-bold tracking-tight">
-          Good evening
+          {greeting()}
         </h1>
         <p className="text-ink-3 mt-[3px] text-[14.5px]">
-          Worker Tablet · Phase 0
+          {authUser.displayName || "Worker Tablet"}
         </p>
       </div>
 
@@ -77,13 +102,15 @@ export default function WorkerHome() {
       <div className="grid grid-cols-2 gap-3.5">
         {actions.map((a) => {
           const Icon = a.icon;
-          return (
-            <button
-              key={a.label}
-              className="border-line hover:border-navy-soft flex min-h-[130px] flex-col gap-3 rounded-2xl border bg-white p-[18px] text-left transition-colors"
-            >
-              <div className="bg-bg flex h-[50px] w-[50px] items-center justify-center rounded-[13px]">
+          const inner = (
+            <>
+              <div className="bg-bg relative flex h-[50px] w-[50px] items-center justify-center rounded-[13px]">
                 <Icon size={26} className="text-navy" strokeWidth={1.9} />
+                {a.badge && (
+                  <span className="bg-rush-red absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold text-white">
+                    {a.badge}
+                  </span>
+                )}
               </div>
               <div>
                 <div className="text-ink text-base font-bold">{a.label}</div>
@@ -91,7 +118,31 @@ export default function WorkerHome() {
                   {a.desc}
                 </div>
               </div>
-            </button>
+            </>
+          );
+
+          if (a.href) {
+            return (
+              <Link
+                key={a.label}
+                href={a.href}
+                className="border-line hover:border-navy-soft flex min-h-[130px] flex-col gap-3 rounded-2xl border bg-white p-[18px] text-left transition-colors"
+              >
+                {inner}
+              </Link>
+            );
+          }
+
+          return (
+            <div
+              key={a.label}
+              className="border-line flex min-h-[130px] flex-col gap-3 rounded-2xl border bg-white p-[18px] text-left opacity-60"
+            >
+              {inner}
+              <Badge variant="default" className="mt-auto w-fit text-[10px]">
+                Coming soon
+              </Badge>
+            </div>
           );
         })}
       </div>
