@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireWorker } from "@/lib/auth";
 import { listInventoryItemsOps } from "@/repositories/worker-inventory";
@@ -17,6 +18,12 @@ export default async function WorkerAlertsPage() {
   return (
     <div>
       <div className="mb-5">
+        <Link
+          href="/worker"
+          className="text-ink-3 mb-2 inline-flex items-center gap-1 text-sm font-medium hover:text-ink"
+        >
+          ← Back
+        </Link>
         <h1 className="text-ink text-xl font-bold">Inventory Alerts</h1>
         <p className="text-ink-3 mt-1 text-[14px]">
           Low and expiring items

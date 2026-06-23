@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUser } from "@/lib/auth";
 import { workerPurchaseCreateSchema } from "@/lib/validators/inventory";
-import { recordPurchase } from "@/services/purchases";
+import { recordWorkerPurchase } from "@/services/purchases";
 
 export async function POST(request: NextRequest) {
   const db = await createClient();
@@ -20,13 +20,11 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const input = {
-    supplierId: parsed.data.supplierId,
-    purchasedOn: parsed.data.purchasedOn,
-    isPaid: parsed.data.isPaid,
-    items: parsed.data.items,
-  };
-
-  const result = await recordPurchase(db, input, authUser.id, "needs_review");
-  return Response.json(result, { status: 201 });
+  try {
+    const result = await recordWorkerPurchase(db, parsed.data, authUser.id);
+    return Response.json(result, { status: 201 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to submit";
+    return Response.json({ error: message }, { status: 500 });
+  }
 }

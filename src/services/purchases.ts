@@ -8,6 +8,7 @@ import type {
 import type {
   PurchaseCreateInput,
   PurchaseApproveInput,
+  WorkerPurchaseCreateInput,
 } from "@/lib/validators/inventory";
 import {
   insertPurchase,
@@ -21,6 +22,7 @@ import {
   updatePurchaseItemCost,
 } from "@/repositories/purchases";
 import { getInventoryItem, adjustStock } from "@/repositories/inventory-items";
+import { listInventoryItemsOps } from "@/repositories/worker-inventory";
 import { purchaseToBaseQty, receiveStock } from "@/lib/calculations/costing";
 
 export async function getAllPurchases(
@@ -190,4 +192,56 @@ export async function cancelPurchase(
   }
 
   await voidPurchase(db, id);
+}
+
+/**
+ * Worker version of recordPurchase. Uses the cost-free operational view
+ * for item lookups (workers can't read the base inventory_items table).
+ * Always creates with status = 'needs_review'; stock is NOT updated.
+ */
+export async function recordWorkerPurchase(
+  db: SupabaseClient,
+  input: WorkerPurchaseCreateInput,
+  createdBy: string,
+): Promise<{ purchase: Purchase; items: PurchaseItem[] }> {
+  const allItems = await listInventoryItemsOps(db);
+  const itemMap = new Map(allItems.map((i) => [i.id, i]));
+
+  const itemDetails = input.items.map((line) => {
+    const item = itemMap.get(line.inventoryItemId);
+    if (!item) {
+      throw new Error(`Inventory item ${line.inventoryItemId} not found`);
+    }
+    const baseQty = purchaseToBaseQty(
+      line.purchaseQty,
+      item.unitsPerPurchase,
+      item.basePerStock,
+    );
+    const lineTotalFils = Math.round(line.purchaseQty * line.unitCostFils);
+    return { item, baseQty, lineTotalFils, line };
+  });
+
+  const totalFils = itemDetails.reduce((sum, d) => sum + d.lineTotalFils, 0);
+
+  const purchase = await insertPurchase(db, {
+    supplierId: input.supplierId ?? null,
+    purchasedOn: input.purchasedOn ?? new Date().toISOString().split("T")[0],
+    isPaid: input.isPaid,
+    dueDate: null,
+    totalFils,
+    createdBy,
+    status: "needs_review",
+  });
+
+  const purchaseItemInputs = itemDetails.map((d) => ({
+    purchaseId: purchase.id,
+    inventoryItemId: d.line.inventoryItemId,
+    purchaseQty: d.line.purchaseQty,
+    baseQty: d.baseQty,
+    unitCostFils: d.line.unitCostFils,
+    lineTotalFils: d.lineTotalFils,
+  }));
+
+  const items = await insertPurchaseItems(db, purchaseItemInputs);
+  return { purchase, items };
 }

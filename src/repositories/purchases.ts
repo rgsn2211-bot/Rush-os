@@ -158,20 +158,32 @@ export async function listPendingPurchases(
 ): Promise<PurchaseWithSubmitter[]> {
   const { data, error } = await db
     .from("purchases")
-    .select("*, profiles!purchases_created_by_fkey(display_name)")
+    .select("*")
     .eq("status", "needs_review")
     .order("created_at", { ascending: false });
 
   if (error) throw error;
-  return data.map(toPurchaseWithSubmitter);
-}
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function toPurchaseWithSubmitter(row: any): PurchaseWithSubmitter {
-  return {
-    ...toPurchase(row),
-    submitterName: row.profiles?.display_name ?? null,
-  };
+  const purchases = data.map(toPurchase);
+  const creatorIds = [
+    ...new Set(purchases.map((p) => p.createdBy).filter(Boolean)),
+  ] as string[];
+
+  let nameMap = new Map<string, string>();
+  if (creatorIds.length > 0) {
+    const { data: profiles } = await db
+      .from("profiles")
+      .select("id, display_name")
+      .in("id", creatorIds);
+    if (profiles) {
+      nameMap = new Map(profiles.map((p) => [p.id, p.display_name]));
+    }
+  }
+
+  return purchases.map((p) => ({
+    ...p,
+    submitterName: (p.createdBy && nameMap.get(p.createdBy)) ?? null,
+  }));
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

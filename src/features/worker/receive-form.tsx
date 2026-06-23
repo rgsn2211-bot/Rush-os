@@ -102,12 +102,17 @@ export function ReceiveForm({ inventoryItems, suppliers }: ReceiveFormProps) {
     });
 
     if (!res.ok) {
-      const data = await res.json();
-      setError(
-        typeof data.error === "string"
-          ? data.error
-          : data.error?.formErrors?.[0] || "Failed to submit",
-      );
+      let message = "Failed to submit";
+      try {
+        const data = await res.json();
+        message =
+          typeof data.error === "string"
+            ? data.error
+            : data.error?.formErrors?.[0] || message;
+      } catch {
+        // response had no JSON body
+      }
+      setError(message);
       setLoading(false);
       return;
     }
