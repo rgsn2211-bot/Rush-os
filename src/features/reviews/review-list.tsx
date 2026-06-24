@@ -2,57 +2,68 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import type { PurchaseWithSubmitter } from "@/types/inventory";
+import type {
+  PurchaseWithSubmitter,
+  WasteLogWithDetails,
+} from "@/types/inventory";
 import type { ComplimentaryLogWithSubmitter } from "@/types/pos";
 import { formatFils } from "@/lib/calculations/currency";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Package, Banknote, Gift } from "lucide-react";
+import { Package, Banknote, Gift, Trash2 } from "lucide-react";
 
 interface ReviewListProps {
   purchases: PurchaseWithSubmitter[];
   complimentaryLogs?: ComplimentaryLogWithSubmitter[];
+  wasteLogs?: WasteLogWithDetails[];
 }
 
-type Filter = "all" | "purchases" | "cash" | "complimentary";
+type Filter = "all" | "purchases" | "cash" | "complimentary" | "waste";
 
 export function ReviewList({
   purchases,
   complimentaryLogs = [],
+  wasteLogs = [],
 }: ReviewListProps) {
   const [filter, setFilter] = useState<Filter>("all");
 
   const cashCount = purchases.filter((p) => p.isPaid).length;
   const supplierCount = purchases.filter((p) => !p.isPaid).length;
   const compCount = complimentaryLogs.length;
+  const wasteCount = wasteLogs.length;
 
   const filteredPurchases = purchases.filter((p) => {
     if (filter === "cash") return p.isPaid;
     if (filter === "purchases") return !p.isPaid;
-    if (filter === "complimentary") return false;
+    if (filter === "complimentary" || filter === "waste") return false;
     return true;
   });
 
   const filteredComp =
     filter === "complimentary" || filter === "all" ? complimentaryLogs : [];
 
-  const totalCount = filteredPurchases.length + filteredComp.length;
+  const filteredWaste =
+    filter === "waste" || filter === "all" ? wasteLogs : [];
+
+  const totalCount =
+    filteredPurchases.length + filteredComp.length + filteredWaste.length;
 
   const categories: { key: Filter; label: string; count: number }[] = [
     {
       key: "all",
       label: "All",
-      count: purchases.length + compCount,
+      count: purchases.length + compCount + wasteCount,
     },
     { key: "purchases", label: "Supplier Deliveries", count: supplierCount },
     { key: "cash", label: "Cash Purchases", count: cashCount },
     { key: "complimentary", label: "Complimentary", count: compCount },
+    { key: "waste", label: "Waste", count: wasteCount },
   ];
 
   return (
     <div>
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
         {categories.map((c) => (
           <button
             key={c.key}
@@ -136,6 +147,38 @@ export function ReviewList({
                   {log.submitterName ?? "Unknown"} ·{" "}
                   {new Date(log.createdAt).toLocaleDateString()} ·{" "}
                   {formatFils(log.amountFils)} BHD
+                </div>
+              </div>
+              <span className="text-ink-3 text-sm">›</span>
+            </Link>
+          ))}
+          {filteredWaste.map((log, i) => (
+            <Link
+              key={log.id}
+              href="/owner/waste"
+              className={`hover:bg-bg flex items-center gap-4 px-5 py-4 ${
+                filteredPurchases.length > 0 ||
+                filteredComp.length > 0 ||
+                i > 0
+                  ? "border-line-2 border-t"
+                  : ""
+              }`}
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-50">
+                <Trash2 size={20} className="text-rush-red" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[15px] font-bold">
+                    {log.itemName ?? "Waste"}
+                  </span>
+                  <Badge variant="amber">Needs review</Badge>
+                </div>
+                <div className="text-ink-2 mt-0.5 text-[13px]">
+                  {log.submitterName ?? "Unknown"} ·{" "}
+                  {new Date(log.createdAt).toLocaleDateString()} ·{" "}
+                  {log.baseQty / (log.basePerStock || 1)}{" "}
+                  {log.stockUnit ?? ""}
                 </div>
               </div>
               <span className="text-ink-3 text-sm">›</span>

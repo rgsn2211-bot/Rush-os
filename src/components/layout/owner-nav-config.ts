@@ -9,6 +9,7 @@ import {
   Truck,
   Gift,
   Trash2,
+  PackageX,
   Sparkles,
   Users,
   ShoppingCart,
@@ -114,6 +115,13 @@ export const ownerNav: OwnerNavItem[] = [
     label: "Complimentary",
     href: "/owner/complimentary",
     icon: Gift,
+  },
+  {
+    type: "link",
+    id: "waste",
+    label: "Waste",
+    href: "/owner/waste",
+    icon: PackageX,
   },
   {
     type: "link",

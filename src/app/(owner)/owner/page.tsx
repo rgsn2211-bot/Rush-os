@@ -4,6 +4,8 @@ import { requireOwner } from "@/lib/auth";
 import { getAllItems } from "@/services/inventory";
 import { getAllProductsWithCosts } from "@/services/products";
 import { getPendingPurchases } from "@/services/purchases";
+import { getPendingComplimentary } from "@/services/complimentary";
+import { getPendingWaste } from "@/services/waste";
 import { formatFils } from "@/lib/calculations/currency";
 import { PageHeader } from "@/components/ui/page-header";
 import { MetricCard } from "@/components/ui/metric-card";
@@ -16,11 +18,17 @@ export default async function OwnerDashboard() {
   const db = await createClient();
   await requireOwner(db);
 
-  const [items, products, pendingReviews] = await Promise.all([
-    getAllItems(db),
-    getAllProductsWithCosts(db),
-    getPendingPurchases(db),
-  ]);
+  const [items, products, pendingPurchases, pendingComp, pendingWaste] =
+    await Promise.all([
+      getAllItems(db),
+      getAllProductsWithCosts(db),
+      getPendingPurchases(db),
+      getPendingComplimentary(db),
+      getPendingWaste(db),
+    ]);
+
+  const pendingCount =
+    pendingPurchases.length + pendingComp.length + pendingWaste.length;
 
   const totalValueFils = items.reduce((sum, i) => sum + i.stockValueFils, 0);
   const lowStock = items.filter(
@@ -52,10 +60,8 @@ export default async function OwnerDashboard() {
         <Link href="/owner/review">
           <MetricCard
             label="Pending reviews"
-            value={String(pendingReviews.length)}
-            accent={
-              pendingReviews.length > 0 ? "var(--color-amber-500)" : undefined
-            }
+            value={String(pendingCount)}
+            accent={pendingCount > 0 ? "var(--color-amber-500)" : undefined}
           />
         </Link>
         <MetricCard label="Products" value={String(products.length)} />

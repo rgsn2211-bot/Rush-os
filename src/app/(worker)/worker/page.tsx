@@ -59,7 +59,7 @@ export default async function WorkerHome() {
       label: "Record Waste",
       desc: "Log spoiled or damaged items",
       icon: Trash2,
-      href: null,
+      href: "/worker/waste",
     },
     {
       label: "Cash Out from Register",

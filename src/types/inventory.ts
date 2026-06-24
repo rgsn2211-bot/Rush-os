@@ -128,3 +128,30 @@ export interface PurchaseWithSubmitter extends Purchase {
 }
 
 export type PurchaseMode = "supplier_delivery" | "cash_purchase";
+
+/** A worker-logged waste entry (spoiled / damaged / expired stock). */
+export interface WasteLog {
+  id: string;
+  inventoryItemId: string;
+  /** Amount wasted, in the item's base unit. */
+  baseQty: number;
+  /** Loss value in fils. Set when the owner approves (0 until then). */
+  valueFils: number;
+  reason: string;
+  notes: string | null;
+  occurredAt: string;
+  status: ReviewStatus;
+  createdBy: string | null;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A waste entry enriched with item + submitter details for display. */
+export interface WasteLogWithDetails extends WasteLog {
+  itemName: string | null;
+  stockUnit: string | null;
+  basePerStock: number;
+  submitterName: string | null;
+}
