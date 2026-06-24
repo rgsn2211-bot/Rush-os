@@ -10,6 +10,7 @@ import {
   Gift,
   Trash2,
   PackageX,
+  CalendarCheck,
   Sparkles,
   Users,
   ShoppingCart,
@@ -88,6 +89,13 @@ export const ownerNav: OwnerNavItem[] = [
     icon: Upload,
   },
   { type: "section", label: "Finance" },
+  {
+    type: "link",
+    id: "closing",
+    label: "Daily Closing",
+    href: "/owner/closing",
+    icon: CalendarCheck,
+  },
   {
     type: "link",
     id: "money",

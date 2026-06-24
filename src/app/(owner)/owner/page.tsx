@@ -6,6 +6,7 @@ import { getAllProductsWithCosts } from "@/services/products";
 import { getPendingPurchases } from "@/services/purchases";
 import { getPendingComplimentary } from "@/services/complimentary";
 import { getPendingWaste } from "@/services/waste";
+import { getPendingClosings } from "@/services/daily-closing";
 import { formatFils } from "@/lib/calculations/currency";
 import { PageHeader } from "@/components/ui/page-header";
 import { MetricCard } from "@/components/ui/metric-card";
@@ -18,17 +19,27 @@ export default async function OwnerDashboard() {
   const db = await createClient();
   await requireOwner(db);
 
-  const [items, products, pendingPurchases, pendingComp, pendingWaste] =
-    await Promise.all([
-      getAllItems(db),
-      getAllProductsWithCosts(db),
-      getPendingPurchases(db),
-      getPendingComplimentary(db),
-      getPendingWaste(db),
-    ]);
+  const [
+    items,
+    products,
+    pendingPurchases,
+    pendingComp,
+    pendingWaste,
+    pendingClosings,
+  ] = await Promise.all([
+    getAllItems(db),
+    getAllProductsWithCosts(db),
+    getPendingPurchases(db),
+    getPendingComplimentary(db),
+    getPendingWaste(db),
+    getPendingClosings(db),
+  ]);
 
   const pendingCount =
-    pendingPurchases.length + pendingComp.length + pendingWaste.length;
+    pendingPurchases.length +
+    pendingComp.length +
+    pendingWaste.length +
+    pendingClosings.length;
 
   const totalValueFils = items.reduce((sum, i) => sum + i.stockValueFils, 0);
   const lowStock = items.filter(

@@ -94,14 +94,18 @@ export default async function WorkerHome() {
         </CardHeader>
         <CardContent>
           <p className="text-ink-3 text-sm">
-            Checklist will be active once daily closing is built in Phase 3.
+            When you finish your shift, tap{" "}
+            <span className="text-ink font-semibold">Start Daily Closing</span>{" "}
+            below to record the day&apos;s sales and cash count.
           </p>
         </CardContent>
       </Card>
 
-      <Button variant="primary" size="xl" full className="mb-[18px] shadow-md">
-        Start Daily Closing
-      </Button>
+      <Link href="/worker/closing" className="mb-[18px] block">
+        <Button variant="primary" size="xl" full className="shadow-md">
+          Start Daily Closing
+        </Button>
+      </Link>
 
       <div className="text-ink-3 mb-3 text-[13px] font-bold tracking-wider uppercase">
         Quick Actions
