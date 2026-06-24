@@ -19,6 +19,23 @@ export const expenseCreateSchema = z.object({
 });
 export type ExpenseCreateInput = z.infer<typeof expenseCreateSchema>;
 
+export const settlementCreateSchema = z.object({
+  channel: z.enum(["card", "benefitpay", "delivery"]),
+  platform: z.string().trim().optional(),
+  periodLabel: z.string().min(1, "Period required"),
+  expectedBhd: moneyBhd.refine((v) => v > 0, "Expected amount required"),
+  feeBhd: moneyBhd.optional(),
+  note: z.string().trim().optional(),
+});
+export type SettlementCreateInput = z.infer<typeof settlementCreateSchema>;
+
+export const settlementConfirmSchema = z.object({
+  actualBhd: moneyBhd,
+  feeBhd: moneyBhd.optional(),
+  receivedOn: dateStr,
+});
+export type SettlementConfirmInput = z.infer<typeof settlementConfirmSchema>;
+
 export const cashMovementCreateSchema = z.object({
   direction: z.enum(["in", "out"]),
   reason: z.string().min(1, "Reason required"),

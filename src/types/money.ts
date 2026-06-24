@@ -59,6 +59,33 @@ export interface CashMovement {
   updatedAt: string;
 }
 
+export type SettlementChannel = "card" | "benefitpay" | "delivery";
+export type SettlementStatus = "pending" | "received";
+
+export interface Settlement {
+  id: string;
+  channel: SettlementChannel;
+  platform: string | null;
+  periodLabel: string;
+  expectedFils: number;
+  feeFils: number | null;
+  actualFils: number | null;
+  receivedOn: string | null;
+  status: SettlementStatus;
+  note: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Projected cash position used by the Cash Flow tab. */
+export interface CashFlowProjection {
+  availableNowFils: number;
+  expectedIncomingFils: number;
+  upcomingOutgoingFils: number;
+  projectedFils: number;
+}
+
 /** Computed metrics for the Money overview. */
 export interface MoneySummary {
   /** Net of the cash log (money in − money out). */

@@ -5,6 +5,8 @@ import {
   getAllExpenses,
   getAllCashMovements,
   getApprovedPurchases,
+  getAllSettlements,
+  getCashFlowProjection,
 } from "@/services/money";
 import { getAllSuppliers } from "@/services/suppliers";
 import { MoneyDashboard } from "@/features/money/money-dashboard";
@@ -14,14 +16,23 @@ export default async function MoneyPage() {
   const db = await createClient();
   await requireOwner(db);
 
-  const [summary, expenses, cashMovements, purchases, suppliers] =
-    await Promise.all([
-      getMoneySummary(db),
-      getAllExpenses(db),
-      getAllCashMovements(db),
-      getApprovedPurchases(db),
-      getAllSuppliers(db),
-    ]);
+  const [
+    summary,
+    expenses,
+    cashMovements,
+    purchases,
+    suppliers,
+    settlements,
+    projection,
+  ] = await Promise.all([
+    getMoneySummary(db),
+    getAllExpenses(db),
+    getAllCashMovements(db),
+    getApprovedPurchases(db),
+    getAllSuppliers(db),
+    getAllSettlements(db),
+    getCashFlowProjection(db),
+  ]);
 
   const supplierNames = new Map(suppliers.map((s) => [s.id, s.name]));
   const purchaseRows: PurchaseRow[] = purchases.map((p) => ({
@@ -41,6 +52,8 @@ export default async function MoneyPage() {
       expenses={expenses}
       cashMovements={cashMovements}
       purchases={purchaseRows}
+      settlements={settlements}
+      projection={projection}
     />
   );
 }

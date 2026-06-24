@@ -6,6 +6,8 @@ import type {
   MoneySummary,
   ExpenseWithLines,
   CashMovement,
+  Settlement,
+  CashFlowProjection,
 } from "@/types/money";
 import type { PurchaseRow } from "@/features/money/types";
 import { formatFils } from "@/lib/calculations/currency";
@@ -17,6 +19,8 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ExpenseForm } from "@/features/money/expense-form";
 import { CashMovementForm } from "@/features/money/cash-movement-form";
+import { SettlementForm } from "@/features/money/settlement-form";
+import { CashFlowView } from "@/features/money/cash-flow-view";
 import {
   Receipt,
   Banknote,
@@ -31,14 +35,17 @@ interface Props {
   expenses: ExpenseWithLines[];
   cashMovements: CashMovement[];
   purchases: PurchaseRow[];
+  settlements: Settlement[];
+  projection: CashFlowProjection;
 }
 
-type Tab = "overview" | "moneyout" | "cashlog";
+type Tab = "overview" | "cashflow" | "moneyout" | "cashlog";
 type MoneyOutSub = "purchases" | "expenses" | "payables";
-type FormKind = "expense" | "movement" | null;
+type FormKind = "expense" | "movement" | "settlement" | null;
 
 const TABS: { v: Tab; label: string }[] = [
   { v: "overview", label: "Overview" },
+  { v: "cashflow", label: "Cash Flow" },
   { v: "moneyout", label: "Money Out" },
   { v: "cashlog", label: "Cash Log" },
 ];
@@ -48,6 +55,8 @@ export function MoneyDashboard({
   expenses,
   cashMovements,
   purchases,
+  settlements,
+  projection,
 }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("overview");
@@ -56,6 +65,8 @@ export function MoneyDashboard({
   if (form === "expense") return <ExpenseForm onDone={() => setForm(null)} />;
   if (form === "movement")
     return <CashMovementForm onDone={() => setForm(null)} />;
+  if (form === "settlement")
+    return <SettlementForm onDone={() => setForm(null)} />;
 
   return (
     <div>
@@ -80,6 +91,13 @@ export function MoneyDashboard({
 
       {tab === "overview" && (
         <Overview summary={summary} onForm={setForm} onTab={setTab} />
+      )}
+      {tab === "cashflow" && (
+        <CashFlowView
+          settlements={settlements}
+          projection={projection}
+          onNew={() => setForm("settlement")}
+        />
       )}
       {tab === "moneyout" && (
         <MoneyOut

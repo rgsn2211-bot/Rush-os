@@ -3,11 +3,15 @@ import type {
   CashMovement,
   ExpenseWithLines,
   MoneySummary,
+  Settlement,
+  CashFlowProjection,
 } from "@/types/money";
 import type { Purchase } from "@/types/inventory";
 import type {
   ExpenseCreateInput,
   CashMovementCreateInput,
+  SettlementCreateInput,
+  SettlementConfirmInput,
 } from "@/lib/validators/money";
 import { bhdToFils } from "@/lib/calculations/currency";
 import {
@@ -23,6 +27,14 @@ import {
   getCashPosition,
 } from "@/repositories/cash-movements";
 import { listPurchases, markPurchasePaid } from "@/repositories/purchases";
+import {
+  insertSettlement,
+  listSettlements,
+  getSettlement,
+  confirmSettlementReceived,
+  deleteSettlement,
+  sumPendingSettlements,
+} from "@/repositories/settlements";
 
 // ---------- Expenses --------------------------------------------------------
 
@@ -114,6 +126,84 @@ export async function payPurchase(
   id: string,
 ): Promise<void> {
   await markPurchasePaid(db, id);
+}
+
+// ---------- Settlements -----------------------------------------------------
+
+export async function recordSettlement(
+  db: SupabaseClient,
+  input: SettlementCreateInput,
+  createdBy: string,
+): Promise<Settlement> {
+  return insertSettlement(db, {
+    channel: input.channel,
+    platform: input.platform,
+    periodLabel: input.periodLabel,
+    expectedFils: bhdToFils(input.expectedBhd),
+    feeFils: input.feeBhd === undefined ? undefined : bhdToFils(input.feeBhd),
+    note: input.note,
+    createdBy,
+  });
+}
+
+export async function getAllSettlements(
+  db: SupabaseClient,
+): Promise<Settlement[]> {
+  return listSettlements(db);
+}
+
+export async function confirmSettlement(
+  db: SupabaseClient,
+  id: string,
+  input: SettlementConfirmInput,
+): Promise<void> {
+  const existing = await getSettlement(db, id);
+  if (!existing) throw new Error("Settlement not found");
+  if (existing.status === "received") {
+    throw new Error("Settlement already confirmed");
+  }
+  await confirmSettlementReceived(
+    db,
+    id,
+    bhdToFils(input.actualBhd),
+    input.feeBhd === undefined ? existing.feeFils : bhdToFils(input.feeBhd),
+    input.receivedOn,
+  );
+}
+
+export async function removeSettlement(
+  db: SupabaseClient,
+  id: string,
+): Promise<void> {
+  return deleteSettlement(db, id);
+}
+
+/**
+ * Projected cash: what's in the till now (cash log net), plus money owed to us
+ * by providers (pending settlements), minus what we owe suppliers (payables).
+ * Cash flow follows money received/paid — not sales dates.
+ */
+export async function getCashFlowProjection(
+  db: SupabaseClient,
+): Promise<CashFlowProjection> {
+  const [availableNowFils, expectedIncomingFils, payables] = await Promise.all([
+    getCashPosition(db),
+    sumPendingSettlements(db),
+    getPayables(db),
+  ]);
+
+  const upcomingOutgoingFils = payables.reduce(
+    (sum, p) => sum + p.totalFils,
+    0,
+  );
+
+  return {
+    availableNowFils,
+    expectedIncomingFils,
+    upcomingOutgoingFils,
+    projectedFils:
+      availableNowFils + expectedIncomingFils - upcomingOutgoingFils,
+  };
 }
 
 // ---------- Overview summary ------------------------------------------------
