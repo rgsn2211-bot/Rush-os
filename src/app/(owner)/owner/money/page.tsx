@@ -1,10 +1,46 @@
-export default function MoneyPage() {
+import { createClient } from "@/lib/supabase/server";
+import { requireOwner } from "@/lib/auth";
+import {
+  getMoneySummary,
+  getAllExpenses,
+  getAllCashMovements,
+  getApprovedPurchases,
+} from "@/services/money";
+import { getAllSuppliers } from "@/services/suppliers";
+import { MoneyDashboard } from "@/features/money/money-dashboard";
+import type { PurchaseRow } from "@/features/money/types";
+
+export default async function MoneyPage() {
+  const db = await createClient();
+  await requireOwner(db);
+
+  const [summary, expenses, cashMovements, purchases, suppliers] =
+    await Promise.all([
+      getMoneySummary(db),
+      getAllExpenses(db),
+      getAllCashMovements(db),
+      getApprovedPurchases(db),
+      getAllSuppliers(db),
+    ]);
+
+  const supplierNames = new Map(suppliers.map((s) => [s.id, s.name]));
+  const purchaseRows: PurchaseRow[] = purchases.map((p) => ({
+    id: p.id,
+    supplierName: p.supplierId
+      ? supplierNames.get(p.supplierId) ?? "Unknown supplier"
+      : "Cash purchase",
+    purchasedOn: p.purchasedOn,
+    isPaid: p.isPaid,
+    dueDate: p.dueDate,
+    totalFils: p.totalFils,
+  }));
+
   return (
-    <div>
-      <h1 className="text-ink text-2xl font-bold">Money</h1>
-      <p className="text-ink-2 mt-2">
-        Expenses, payables, cash flow — coming in Phase 3.
-      </p>
-    </div>
+    <MoneyDashboard
+      summary={summary}
+      expenses={expenses}
+      cashMovements={cashMovements}
+      purchases={purchaseRows}
+    />
   );
 }

@@ -136,6 +136,19 @@ export async function approvePurchaseRecord(
   if (error) throw error;
 }
 
+/** Mark an unpaid purchase as paid (closes the payable). */
+export async function markPurchasePaid(
+  db: SupabaseClient,
+  id: string,
+): Promise<void> {
+  const { error } = await db
+    .from("purchases")
+    .update({ is_paid: true })
+    .eq("id", id);
+
+  if (error) throw error;
+}
+
 export async function updatePurchaseItemCost(
   db: SupabaseClient,
   purchaseItemId: string,
