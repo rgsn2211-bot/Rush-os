@@ -13,6 +13,7 @@ import {
   Users,
   ShoppingCart,
   Upload,
+  MoreHorizontal,
 } from "lucide-react";
 
 export type OwnerNavLink = {
@@ -166,16 +167,24 @@ export const ownerMobileNav: OwnerNavLink[] = [
   },
   {
     type: "link",
-    id: "reports",
-    label: "Reports",
-    href: "/owner/profit",
-    icon: BarChart3,
+    id: "more",
+    label: "More",
+    href: "#more",
+    icon: MoreHorizontal,
   },
 ];
 
+const mobileTabIds = new Set(ownerMobileNav.map((i) => i.id));
+
+/** Nav items that appear in the "More" sheet on mobile. */
+export const ownerMoreLinks = ownerNav.filter(
+  (item): item is OwnerNavLink =>
+    item.type === "link" && !mobileTabIds.has(item.id),
+);
+
 /**
- * Which bottom-nav tab should highlight for a given pathname. The phone groups
- * the finance/reporting pages under the single "Reports" tab.
+ * Which bottom-nav tab should highlight for a given pathname.
+ * Pages not in the first four tabs highlight the "More" tab.
  */
 export function activeMobileTab(pathname: string): string {
   if (pathname === "/owner") return "/owner";
@@ -187,12 +196,5 @@ export function activeMobileTab(pathname: string): string {
   )
     return "/owner/inventory";
   if (pathname.startsWith("/owner/money")) return "/owner/money";
-  if (
-    pathname.startsWith("/owner/profit") ||
-    pathname.startsWith("/owner/delivery") ||
-    pathname.startsWith("/owner/complimentary") ||
-    pathname.startsWith("/owner/losses")
-  )
-    return "/owner/profit";
-  return "/owner";
+  return "#more";
 }
