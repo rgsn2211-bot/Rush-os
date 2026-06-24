@@ -8,6 +8,7 @@ import type {
   CashMovement,
   Settlement,
   CashFlowProjection,
+  RecurringCost,
 } from "@/types/money";
 import type { PurchaseRow } from "@/features/money/types";
 import { formatFils } from "@/lib/calculations/currency";
@@ -21,6 +22,8 @@ import { ExpenseForm } from "@/features/money/expense-form";
 import { CashMovementForm } from "@/features/money/cash-movement-form";
 import { SettlementForm } from "@/features/money/settlement-form";
 import { CashFlowView } from "@/features/money/cash-flow-view";
+import { RecurringForm } from "@/features/money/recurring-form";
+import { UpcomingView } from "@/features/money/upcoming-view";
 import {
   Receipt,
   Banknote,
@@ -37,17 +40,19 @@ interface Props {
   purchases: PurchaseRow[];
   settlements: Settlement[];
   projection: CashFlowProjection;
+  recurringCosts: RecurringCost[];
 }
 
-type Tab = "overview" | "cashflow" | "moneyout" | "cashlog";
+type Tab = "overview" | "cashflow" | "moneyout" | "cashlog" | "upcoming";
 type MoneyOutSub = "purchases" | "expenses" | "payables";
-type FormKind = "expense" | "movement" | "settlement" | null;
+type FormKind = "expense" | "movement" | "settlement" | "recurring" | null;
 
 const TABS: { v: Tab; label: string }[] = [
   { v: "overview", label: "Overview" },
   { v: "cashflow", label: "Cash Flow" },
   { v: "moneyout", label: "Money Out" },
   { v: "cashlog", label: "Cash Log" },
+  { v: "upcoming", label: "Upcoming Costs" },
 ];
 
 export function MoneyDashboard({
@@ -57,6 +62,7 @@ export function MoneyDashboard({
   purchases,
   settlements,
   projection,
+  recurringCosts,
 }: Props) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("overview");
@@ -67,6 +73,8 @@ export function MoneyDashboard({
     return <CashMovementForm onDone={() => setForm(null)} />;
   if (form === "settlement")
     return <SettlementForm onDone={() => setForm(null)} />;
+  if (form === "recurring")
+    return <RecurringForm onDone={() => setForm(null)} />;
 
   return (
     <div>
@@ -113,6 +121,12 @@ export function MoneyDashboard({
           movements={cashMovements}
           onNew={() => setForm("movement")}
           onRefresh={() => router.refresh()}
+        />
+      )}
+      {tab === "upcoming" && (
+        <UpcomingView
+          costs={recurringCosts}
+          onNew={() => setForm("recurring")}
         />
       )}
     </div>

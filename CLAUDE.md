@@ -74,9 +74,17 @@ Supabase + Vercel.
 - POS upload calendar (interactive date selection, date validation)
 - Complimentary logging (worker picks product or "Other", logs with reason,
   can delete own pending entries; owner reviews/approves/rejects)
+- Record Waste (worker submit → owner review → stock deduction on approve)
+- Daily Closing / EOD (worker 3-step wizard: EOD numbers, cash count, review;
+  owner reviews/approves. The official daily revenue record. Approving does
+  not touch inventory. Cash expected = cash sales for now; per-platform
+  delivery breakdown not yet captured.)
+- Money (owner): Overview, Cash Flow (settlements reconciliation), Money Out
+  (purchases / expenses / payables), Cash Log (manual cash movements),
+  Upcoming Costs (recurring). Cash position = net of the Cash Log. Settlements
+  are a reconciliation ledger and don't auto-post to the Cash Log yet.
 - Owner mobile "More" menu (slide-up sheet for pages not in bottom nav)
 
 **Not yet built (placeholders only):**
-- Daily Closing (worker home has button but no implementation)
-- Mark Item Opened, Record Waste, Cash Out, Inventory Count (worker quick actions)
-- Money, Profit Reports, Delivery Apps, Losses, AI Insights (owner pages)
+- Mark Item Opened, Cash Out from Register, Inventory Count (worker quick actions)
+- Profit Reports, Delivery Apps, Losses, AI Insights (owner pages)

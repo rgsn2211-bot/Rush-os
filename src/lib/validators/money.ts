@@ -19,6 +19,18 @@ export const expenseCreateSchema = z.object({
 });
 export type ExpenseCreateInput = z.infer<typeof expenseCreateSchema>;
 
+export const recurringCostCreateSchema = z.object({
+  name: z.string().min(1, "Name required"),
+  costType: z.string().min(1),
+  amountBhd: moneyBhd.refine((v) => v > 0, "Amount required"),
+  frequency: z.enum(["Monthly", "Weekly", "On invoice", "One-time"]),
+  nextDueDate: dateStr,
+  defaultMethod: z.string().min(1),
+});
+export type RecurringCostCreateInput = z.infer<
+  typeof recurringCostCreateSchema
+>;
+
 export const settlementCreateSchema = z.object({
   channel: z.enum(["card", "benefitpay", "delivery"]),
   platform: z.string().trim().optional(),

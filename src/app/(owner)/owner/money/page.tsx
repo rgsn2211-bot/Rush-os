@@ -7,6 +7,7 @@ import {
   getApprovedPurchases,
   getAllSettlements,
   getCashFlowProjection,
+  getAllRecurringCosts,
 } from "@/services/money";
 import { getAllSuppliers } from "@/services/suppliers";
 import { MoneyDashboard } from "@/features/money/money-dashboard";
@@ -24,6 +25,7 @@ export default async function MoneyPage() {
     suppliers,
     settlements,
     projection,
+    recurringCosts,
   ] = await Promise.all([
     getMoneySummary(db),
     getAllExpenses(db),
@@ -32,6 +34,7 @@ export default async function MoneyPage() {
     getAllSuppliers(db),
     getAllSettlements(db),
     getCashFlowProjection(db),
+    getAllRecurringCosts(db),
   ]);
 
   const supplierNames = new Map(suppliers.map((s) => [s.id, s.name]));
@@ -54,6 +57,7 @@ export default async function MoneyPage() {
       purchases={purchaseRows}
       settlements={settlements}
       projection={projection}
+      recurringCosts={recurringCosts}
     />
   );
 }

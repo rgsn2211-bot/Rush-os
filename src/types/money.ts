@@ -59,6 +59,42 @@ export interface CashMovement {
   updatedAt: string;
 }
 
+export type RecurringFrequency =
+  | "Monthly"
+  | "Weekly"
+  | "On invoice"
+  | "One-time";
+
+export const RECURRING_TYPES = [
+  "Rent",
+  "Salaries",
+  "Supplier",
+  "Subscription",
+  "Installment",
+  "Other",
+] as const;
+
+export const RECURRING_FREQUENCIES: RecurringFrequency[] = [
+  "Monthly",
+  "Weekly",
+  "On invoice",
+  "One-time",
+];
+
+export interface RecurringCost {
+  id: string;
+  name: string;
+  costType: string;
+  amountFils: number;
+  frequency: RecurringFrequency;
+  nextDueDate: string;
+  defaultMethod: string;
+  active: boolean;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type SettlementChannel = "card" | "benefitpay" | "delivery";
 export type SettlementStatus = "pending" | "received";
 
