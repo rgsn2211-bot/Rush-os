@@ -32,18 +32,27 @@ Supabase + Vercel.
 - POS **Sales By Item** drives item quantities, recipe-based inventory usage, and COGS.
   It is **not** the official revenue record — **Daily EOD** is.
 - **Complimentary items are already counted in Sales By Item.** Never deduct inventory
-  for them a second time. The complimentary report is monetary control only (it has no items).
+  for them a second time. Complimentary logs track the monetary value and link to
+  a product when one is selected (or a free-text description for custom items).
+  Workers pick from the products table or tap "Other" for custom entries.
 - Inventory becomes COGS as it is sold/used/wasted — a purchase is not immediately COGS.
 - Costing and valuation use **weighted-average confirmed cost**.
 - Worker submissions are recorded with who+timestamp, notify the owner, and go to
   **Owner Review**; voids reverse effects but keep an audit record.
+  Workers can delete their own pending (`needs_review`) complimentary logs before
+  the owner reviews them.
 - POS imports must be **idempotent** — never double-deduct on reprocess.
+- **Daily Closing** is not yet implemented (placeholder on the worker home screen).
+  Do not build features that depend on a daily-close having run.
 
 ## Workflow
 
 - Develop on the assigned feature branch. Commit clearly. Push when a phase is done.
 - Before committing: `npm run typecheck && npm run lint && npm run test`.
 - Generate DB types after migrations: `npm run db:types`.
+- **Migration filenames**: use consistent format. Never mix short (`20260625_`)
+  and long (`20260625100000_`) version prefixes for the same date — the Supabase
+  CLI can't match them. One migration per version number; no duplicates.
 - Never commit secrets, real financial exports, PINs, or customer/employee PII.
   Use `.env.local` (git-ignored); document new vars in `.env.example`.
 
@@ -53,3 +62,21 @@ Supabase + Vercel.
 - POS pipeline spec: `docs/pos/file-structure.md`.
 - Architecture decisions: `docs/architecture/decisions/`.
 - Layer guide: `src/README.md`.
+
+## Feature status
+
+**Built and working:**
+- Inventory management (owner CRUD, worker read-only view, alerts)
+- Products + recipes (owner CRUD, linked to inventory items)
+- Suppliers (owner CRUD, worker read-only)
+- Purchases / receive stock (worker submit → owner review)
+- POS import pipeline (XLSX upload → item mapping → inventory deduction)
+- POS upload calendar (interactive date selection, date validation)
+- Complimentary logging (worker picks product or "Other", logs with reason,
+  can delete own pending entries; owner reviews/approves/rejects)
+- Owner mobile "More" menu (slide-up sheet for pages not in bottom nav)
+
+**Not yet built (placeholders only):**
+- Daily Closing (worker home has button but no implementation)
+- Mark Item Opened, Record Waste, Cash Out, Inventory Count (worker quick actions)
+- Money, Profit Reports, Delivery Apps, Losses, AI Insights (owner pages)
