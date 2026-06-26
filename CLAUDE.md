@@ -75,16 +75,25 @@ Supabase + Vercel.
 - Complimentary logging (worker picks product or "Other", logs with reason,
   can delete own pending entries; owner reviews/approves/rejects)
 - Record Waste (worker submit → owner review → stock deduction on approve)
-- Daily Closing / EOD (worker 3-step wizard: EOD numbers, cash count, review;
-  owner reviews/approves. The official daily revenue record. Approving does
-  not touch inventory. Cash expected = cash sales for now; per-platform
-  delivery breakdown not yet captured.)
-- Money (owner): Overview, Cash Flow (settlements reconciliation), Money Out
-  (purchases / expenses / payables), Cash Log (manual cash movements),
-  Upcoming Costs (recurring). Cash position = net of the Cash Log. Settlements
-  are a reconciliation ledger and don't auto-post to the Cash Log yet.
+- Daily Closing / EOD (worker wizard: per-payment-method amounts AND order
+  counts — cash, card, BenefitPay, and one row per delivery platform — optional
+  Sales By Item XLSX upload step, cash count, review; owner reviews/approves.
+  The official daily revenue record; approving does not touch inventory.
+  Approving posts cash sales into the register and auto-creates pending
+  settlements per channel/platform — see Money.)
+- Worker Cash Out from Register (purchase or withdrawal → owner review →
+  register cash-out movement on approve)
+- Delivery Apps (owner): Settings (per-platform commission % + fixed fee/order,
+  active toggle; seeded Jahez/Talabat/Keeta/Beanz), Report (per-platform gross /
+  commission / net / received / pending), Settlement (multi-day reconcile).
+- Money (owner): Overview (register + bank = total money "have", plus pending
+  settlements "still owed" and "should have"), Cash Flow (settlements +
+  projection), Money Out (purchases / expenses / payables), Cash Log (manual
+  movements per account + register→bank deposit), Upcoming Costs (recurring).
+  Money lives in two accounts: register and bank. Confirming/reconciling a
+  settlement posts the received amount into the bank.
 - Owner mobile "More" menu (slide-up sheet for pages not in bottom nav)
 
 **Not yet built (placeholders only):**
-- Mark Item Opened, Cash Out from Register, Inventory Count (worker quick actions)
-- Profit Reports, Delivery Apps, Losses, AI Insights (owner pages)
+- Mark Item Opened, Inventory Count (worker quick actions)
+- Profit Reports, Losses, AI Insights (owner pages)
