@@ -15,6 +15,7 @@ import {
   Users,
   ShoppingCart,
   Upload,
+  HandCoins,
   MoreHorizontal,
 } from "lucide-react";
 
@@ -130,6 +131,13 @@ export const ownerNav: OwnerNavItem[] = [
     label: "Waste",
     href: "/owner/waste",
     icon: PackageX,
+  },
+  {
+    type: "link",
+    id: "cashout",
+    label: "Register Cash Out",
+    href: "/owner/cash-out",
+    icon: HandCoins,
   },
   {
     type: "link",

@@ -8,6 +8,7 @@ import type {
 } from "@/types/inventory";
 import type { ComplimentaryLogWithSubmitter } from "@/types/pos";
 import type { DailyClosingWithSubmitter } from "@/types/closing";
+import type { RegisterCashOutWithSubmitter } from "@/types/register-cash-out";
 import { formatFils } from "@/lib/calculations/currency";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +26,7 @@ interface ReviewListProps {
   complimentaryLogs?: ComplimentaryLogWithSubmitter[];
   wasteLogs?: WasteLogWithDetails[];
   closings?: DailyClosingWithSubmitter[];
+  cashOuts?: RegisterCashOutWithSubmitter[];
 }
 
 type Filter =
@@ -33,13 +35,15 @@ type Filter =
   | "cash"
   | "complimentary"
   | "waste"
-  | "closing";
+  | "closing"
+  | "cashout";
 
 export function ReviewList({
   purchases,
   complimentaryLogs = [],
   wasteLogs = [],
   closings = [],
+  cashOuts = [],
 }: ReviewListProps) {
   const [filter, setFilter] = useState<Filter>("all");
 
@@ -48,11 +52,17 @@ export function ReviewList({
   const compCount = complimentaryLogs.length;
   const wasteCount = wasteLogs.length;
   const closingCount = closings.length;
+  const cashOutCount = cashOuts.length;
 
   const filteredPurchases = purchases.filter((p) => {
     if (filter === "cash") return p.isPaid;
     if (filter === "purchases") return !p.isPaid;
-    if (filter === "complimentary" || filter === "waste" || filter === "closing")
+    if (
+      filter === "complimentary" ||
+      filter === "waste" ||
+      filter === "closing" ||
+      filter === "cashout"
+    )
       return false;
     return true;
   });
@@ -66,23 +76,33 @@ export function ReviewList({
   const filteredClosings =
     filter === "closing" || filter === "all" ? closings : [];
 
+  const filteredCashOuts =
+    filter === "cashout" || filter === "all" ? cashOuts : [];
+
   const totalCount =
     filteredPurchases.length +
     filteredComp.length +
     filteredWaste.length +
-    filteredClosings.length;
+    filteredClosings.length +
+    filteredCashOuts.length;
 
   const categories: { key: Filter; label: string; count: number }[] = [
     {
       key: "all",
       label: "All",
-      count: purchases.length + compCount + wasteCount + closingCount,
+      count:
+        purchases.length +
+        compCount +
+        wasteCount +
+        closingCount +
+        cashOutCount,
     },
     { key: "purchases", label: "Supplier Deliveries", count: supplierCount },
     { key: "cash", label: "Cash Purchases", count: cashCount },
     { key: "complimentary", label: "Complimentary", count: compCount },
     { key: "waste", label: "Waste", count: wasteCount },
     { key: "closing", label: "Daily Closing", count: closingCount },
+    { key: "cashout", label: "Register Cash Out", count: cashOutCount },
   ];
 
   return (
@@ -234,6 +254,39 @@ export function ReviewList({
                 <div className="text-ink-2 mt-0.5 text-[13px]">
                   {c.submitterName ?? "Unknown"} · {c.totalOrders} orders ·{" "}
                   {formatFils(c.grossSalesFils)} BHD gross
+                </div>
+              </div>
+              <span className="text-ink-3 text-sm">›</span>
+            </Link>
+          ))}
+          {filteredCashOuts.map((c, i) => (
+            <Link
+              key={c.id}
+              href="/owner/cash-out"
+              className={`hover:bg-bg flex items-center gap-4 px-5 py-4 ${
+                filteredPurchases.length > 0 ||
+                filteredComp.length > 0 ||
+                filteredWaste.length > 0 ||
+                filteredClosings.length > 0 ||
+                i > 0
+                  ? "border-line-2 border-t"
+                  : ""
+              }`}
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50">
+                <Banknote size={20} className="text-amber-500" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[15px] font-bold capitalize">
+                    Register {c.kind}
+                  </span>
+                  <Badge variant="amber">Needs review</Badge>
+                </div>
+                <div className="text-ink-2 mt-0.5 text-[13px]">
+                  {c.submitterName ?? "Unknown"} ·{" "}
+                  {new Date(c.createdAt).toLocaleDateString()} ·{" "}
+                  {formatFils(c.amountFils)} BHD · {c.reason}
                 </div>
               </div>
               <span className="text-ink-3 text-sm">›</span>

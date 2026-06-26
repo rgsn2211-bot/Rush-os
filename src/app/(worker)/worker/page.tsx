@@ -65,7 +65,7 @@ export default async function WorkerHome() {
       label: "Cash Out from Register",
       desc: "Purchases, expenses, withdrawals",
       icon: Banknote,
-      href: null,
+      href: "/worker/cash-out",
     },
     {
       label: "Inventory Count",
