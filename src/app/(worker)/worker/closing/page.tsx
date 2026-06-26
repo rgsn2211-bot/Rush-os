@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireWorker } from "@/lib/auth";
 import { getClosingForDate } from "@/services/daily-closing";
+import { getPlatformsForWorker } from "@/services/delivery";
 import { ClosingWizard } from "@/features/worker/closing-wizard";
 
 export default async function WorkerClosingPage() {
@@ -9,7 +10,10 @@ export default async function WorkerClosingPage() {
   await requireWorker(db);
 
   const today = new Date().toISOString().split("T")[0];
-  const existing = await getClosingForDate(db, today);
+  const [existing, platforms] = await Promise.all([
+    getClosingForDate(db, today),
+    getPlatformsForWorker(db),
+  ]);
 
   return (
     <div>
@@ -25,7 +29,11 @@ export default async function WorkerClosingPage() {
       <p className="text-ink-3 mb-5 text-[14.5px]">
         Close out the day&apos;s sales and cash for the owner to review.
       </p>
-      <ClosingWizard today={today} existingStatus={existing?.status ?? null} />
+      <ClosingWizard
+        today={today}
+        existingStatus={existing?.status ?? null}
+        platforms={platforms}
+      />
     </div>
   );
 }

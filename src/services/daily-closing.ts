@@ -7,6 +7,7 @@ import type { DailyClosingCreateInput } from "@/lib/validators/closing";
 import { bhdToFils } from "@/lib/calculations/currency";
 import {
   insertDailyClosing,
+  insertDeliveryClosingLines,
   listDailyClosings,
   listPendingDailyClosings,
   getDailyClosingByDate,
@@ -34,21 +35,40 @@ export async function submitDailyClosing(
   const cashSalesFils = bhdToFils(input.cashSalesBhd);
   const cardSalesFils = bhdToFils(input.cardSalesBhd);
   const benefitpaySalesFils = bhdToFils(input.benefitpaySalesBhd);
-  const deliverySalesFils = bhdToFils(input.deliverySalesBhd);
+
+  const deliveryLines = input.deliveryLines.map((l) => ({
+    platformId: l.platformId,
+    salesFils: bhdToFils(l.salesBhd),
+    orders: l.orders,
+  }));
+  const deliverySalesFils = deliveryLines.reduce(
+    (sum, l) => sum + l.salesFils,
+    0,
+  );
+  const deliveryOrders = deliveryLines.reduce((sum, l) => sum + l.orders, 0);
+
   const grossSalesFils =
     cashSalesFils + cardSalesFils + benefitpaySalesFils + deliverySalesFils;
+  const totalOrders =
+    input.cashOrders +
+    input.cardOrders +
+    input.benefitpayOrders +
+    deliveryOrders;
 
   const cashCountedFils = bhdToFils(input.cashCountedBhd);
   const cashExpectedFils = cashSalesFils;
   const cashVarianceFils = cashCountedFils - cashExpectedFils;
 
-  return insertDailyClosing(db, {
+  const closing = await insertDailyClosing(db, {
     reportDate: input.reportDate,
-    totalOrders: input.totalOrders,
+    totalOrders,
     discountFils: bhdToFils(input.discountBhd),
     cashSalesFils,
+    cashOrders: input.cashOrders,
     cardSalesFils,
+    cardOrders: input.cardOrders,
     benefitpaySalesFils,
+    benefitpayOrders: input.benefitpayOrders,
     deliverySalesFils,
     grossSalesFils,
     cashCountedFils,
@@ -57,6 +77,14 @@ export async function submitDailyClosing(
     notes: input.notes,
     createdBy,
   });
+
+  // Only persist platforms the worker actually entered (sales or orders > 0).
+  const linesToSave = deliveryLines.filter(
+    (l) => l.salesFils > 0 || l.orders > 0,
+  );
+  await insertDeliveryClosingLines(db, closing.id, linesToSave);
+
+  return closing;
 }
 
 export async function getAllClosings(

@@ -3,14 +3,21 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ReviewStatus } from "@/types/inventory";
+import type { DeliveryPlatformLite } from "@/types/delivery";
 import { formatBhd } from "@/lib/calculations/currency";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Check, ClipboardList } from "lucide-react";
+import {
+  Check,
+  ClipboardList,
+  Upload,
+  AlertTriangle,
+  FileSpreadsheet,
+} from "lucide-react";
 
-const STEPS = ["EOD Numbers", "Cash Count", "Review & Submit"];
+const STEPS = ["EOD Numbers", "Sales by Item", "Cash Count", "Review & Submit"];
 
 // Bahraini cash denominations, in BHD.
 const DENOMS = [20, 10, 5, 1, 0.5, 0.1];
@@ -26,31 +33,80 @@ const DENOM_LABELS: Record<string, string> = {
 interface ClosingWizardProps {
   today: string;
   existingStatus: ReviewStatus | null;
+  platforms: DeliveryPlatformLite[];
 }
 
 function num(s: string): number {
   const n = Number(s);
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
+function int(s: string): number {
+  const n = parseInt(s || "0", 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
 
-export function ClosingWizard({ today, existingStatus }: ClosingWizardProps) {
+interface UploadSummary {
+  status: string;
+  reportDate?: string;
+  rowCount: number;
+  mappedCount: number;
+  unmappedCount: number;
+  needsReviewCount: number;
+}
+
+export function ClosingWizard({
+  today,
+  existingStatus,
+  platforms,
+}: ClosingWizardProps) {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
-  const [totalOrders, setTotalOrders] = useState("");
   const [discount, setDiscount] = useState("");
   const [cashSales, setCashSales] = useState("");
+  const [cashOrders, setCashOrders] = useState("");
   const [cardSales, setCardSales] = useState("");
+  const [cardOrders, setCardOrders] = useState("");
   const [benefitpaySales, setBenefitpaySales] = useState("");
-  const [deliverySales, setDeliverySales] = useState("");
+  const [benefitpayOrders, setBenefitpayOrders] = useState("");
+  // platform id -> { sales, orders } as strings
+  const [delivery, setDelivery] = useState<
+    Record<string, { sales: string; orders: string }>
+  >({});
   const [notes, setNotes] = useState("");
   const [counts, setCounts] = useState<Record<string, string>>({});
 
+  // POS upload state
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSummary, setUploadSummary] = useState<UploadSummary | null>(null);
+
+  function setDeliveryField(
+    id: string,
+    field: "sales" | "orders",
+    value: string,
+  ) {
+    setDelivery((d) => {
+      const cur = d[id] ?? { sales: "", orders: "" };
+      return { ...d, [id]: { ...cur, [field]: value } };
+    });
+  }
+
+  const deliveryTotal = platforms.reduce(
+    (s, p) => s + num(delivery[p.id]?.sales ?? ""),
+    0,
+  );
+  const deliveryOrders = platforms.reduce(
+    (s, p) => s + int(delivery[p.id]?.orders ?? ""),
+    0,
+  );
   const grossSales =
-    num(cashSales) + num(cardSales) + num(benefitpaySales) + num(deliverySales);
+    num(cashSales) + num(cardSales) + num(benefitpaySales) + deliveryTotal;
+  const totalOrders =
+    int(cashOrders) + int(cardOrders) + int(benefitpayOrders) + deliveryOrders;
   const countedTotal = DENOMS.reduce(
     (s, d) => s + d * (parseInt(counts[String(d)] || "0", 10) || 0),
     0,
@@ -111,21 +167,53 @@ export function ClosingWizard({ today, existingStatus }: ClosingWizardProps) {
     setStep((s) => Math.max(s - 1, 0));
   }
 
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setUploadError(null);
+
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(
+      `/api/worker/closing/pos-upload?expectedDate=${today}`,
+      { method: "POST", body: formData },
+    );
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setUploadError(
+        typeof data.error === "string" ? data.error : "Upload failed",
+      );
+    } else {
+      setUploadSummary(await res.json());
+    }
+    setUploading(false);
+    e.target.value = "";
+  }
+
   async function handleSubmit() {
     setError(null);
     setLoading(true);
+
+    const deliveryLines = platforms.map((p) => ({
+      platformId: p.id,
+      salesBhd: num(delivery[p.id]?.sales ?? ""),
+      orders: int(delivery[p.id]?.orders ?? ""),
+    }));
 
     const res = await fetch("/api/worker/closing", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         reportDate: today,
-        totalOrders: parseInt(totalOrders || "0", 10) || 0,
         discountBhd: num(discount),
         cashSalesBhd: num(cashSales),
+        cashOrders: int(cashOrders),
         cardSalesBhd: num(cardSales),
+        cardOrders: int(cardOrders),
         benefitpaySalesBhd: num(benefitpaySales),
-        deliverySalesBhd: num(deliverySales),
+        benefitpayOrders: int(benefitpayOrders),
+        deliveryLines,
         cashCountedBhd: countedTotal,
         notes: notes.trim() || undefined,
       }),
@@ -172,101 +260,148 @@ export function ClosingWizard({ today, existingStatus }: ClosingWizardProps) {
       {step === 0 && (
         <Card>
           <CardContent>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <Label htmlFor="orders">Total orders</Label>
-                <Input
-                  id="orders"
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={totalOrders}
-                  onChange={(e) => setTotalOrders(e.target.value)}
-                  placeholder="0"
-                  className="font-mono"
-                />
-              </div>
-              <div>
-                <Label htmlFor="discount">Discount total (BHD)</Label>
-                <Input
-                  id="discount"
-                  type="number"
-                  min="0"
-                  step="0.001"
-                  value={discount}
-                  onChange={(e) => setDiscount(e.target.value)}
-                  placeholder="0.000"
-                  className="font-mono"
-                />
-              </div>
-              <div>
-                <Label htmlFor="cash">Cash sales (BHD)</Label>
-                <Input
-                  id="cash"
-                  type="number"
-                  min="0"
-                  step="0.001"
-                  value={cashSales}
-                  onChange={(e) => setCashSales(e.target.value)}
-                  placeholder="0.000"
-                  className="font-mono"
-                />
-              </div>
-              <div>
-                <Label htmlFor="card">Card sales (BHD)</Label>
-                <Input
-                  id="card"
-                  type="number"
-                  min="0"
-                  step="0.001"
-                  value={cardSales}
-                  onChange={(e) => setCardSales(e.target.value)}
-                  placeholder="0.000"
-                  className="font-mono"
-                />
-              </div>
-              <div>
-                <Label htmlFor="benefitpay">BenefitPay sales (BHD)</Label>
-                <Input
-                  id="benefitpay"
-                  type="number"
-                  min="0"
-                  step="0.001"
-                  value={benefitpaySales}
-                  onChange={(e) => setBenefitpaySales(e.target.value)}
-                  placeholder="0.000"
-                  className="font-mono"
-                />
-              </div>
-              <div>
-                <Label htmlFor="delivery">Delivery apps sales (BHD)</Label>
-                <Input
-                  id="delivery"
-                  type="number"
-                  min="0"
-                  step="0.001"
-                  value={deliverySales}
-                  onChange={(e) => setDeliverySales(e.target.value)}
-                  placeholder="0.000"
-                  className="font-mono"
-                />
-              </div>
+            <div className="mb-3">
+              <Label htmlFor="discount">Discount total (BHD)</Label>
+              <Input
+                id="discount"
+                type="number"
+                min="0"
+                step="0.001"
+                value={discount}
+                onChange={(e) => setDiscount(e.target.value)}
+                placeholder="0.000"
+                className="font-mono"
+              />
             </div>
+
+            <div className="text-ink-3 mb-2 mt-4 text-xs font-semibold uppercase tracking-wide">
+              Sales by payment method
+            </div>
+            <MethodRow
+              label="Cash"
+              amount={cashSales}
+              orders={cashOrders}
+              onAmount={setCashSales}
+              onOrders={setCashOrders}
+            />
+            <MethodRow
+              label="Card"
+              amount={cardSales}
+              orders={cardOrders}
+              onAmount={setCardSales}
+              onOrders={setCardOrders}
+            />
+            <MethodRow
+              label="BenefitPay"
+              amount={benefitpaySales}
+              orders={benefitpayOrders}
+              onAmount={setBenefitpaySales}
+              onOrders={setBenefitpayOrders}
+            />
+
+            {platforms.length > 0 && (
+              <>
+                <div className="text-ink-3 mb-2 mt-5 text-xs font-semibold uppercase tracking-wide">
+                  Delivery apps
+                </div>
+                {platforms.map((p) => (
+                  <MethodRow
+                    key={p.id}
+                    label={p.name}
+                    amount={delivery[p.id]?.sales ?? ""}
+                    orders={delivery[p.id]?.orders ?? ""}
+                    onAmount={(v) => setDeliveryField(p.id, "sales", v)}
+                    onOrders={(v) => setDeliveryField(p.id, "orders", v)}
+                  />
+                ))}
+              </>
+            )}
+
             <div className="bg-bg text-ink-2 mt-4 flex items-center justify-between rounded-xl px-4 py-3 text-sm">
-              <span className="font-semibold">Gross sales</span>
+              <span className="font-semibold">
+                Gross sales · {totalOrders} orders
+              </span>
               <span className="font-mono font-bold">
                 {formatBhd(grossSales)} BHD
               </span>
             </div>
             <p className="text-ink-3 mt-3 text-xs leading-relaxed">
-              Delivery commissions and fees are reconciled monthly by the owner —
-              enter only the platform sales total here.
+              Enter each platform&apos;s sales total and order count. The owner
+              applies commissions per platform on the Delivery Apps page.
             </p>
           </CardContent>
         </Card>
       )}
 
       {step === 1 && (
+        <Card>
+          <CardContent>
+            <div className="mb-1 flex items-center gap-2">
+              <FileSpreadsheet size={18} className="text-navy" />
+              <span className="text-ink text-[15px] font-bold">
+                Sales by Item (optional)
+              </span>
+            </div>
+            <p className="text-ink-3 mb-4 text-sm">
+              Upload today&apos;s Sales By Item XLSX export so inventory usage
+              and COGS are recorded. You can skip this and continue.
+            </p>
+
+            {uploadSummary ? (
+              <div className="flex items-start gap-3 rounded-xl border border-green-200 bg-green-50 px-4 py-3">
+                <Check size={18} className="mt-0.5 shrink-0 text-green-600" />
+                <div className="text-sm">
+                  <div className="font-semibold text-green-700">
+                    Uploaded for {uploadSummary.reportDate ?? today}
+                  </div>
+                  <p className="text-ink-2 mt-0.5">
+                    {uploadSummary.rowCount} items · status{" "}
+                    {uploadSummary.status}
+                    {uploadSummary.unmappedCount > 0 &&
+                      ` · ${uploadSummary.unmappedCount} need owner mapping`}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <label className="flex cursor-pointer flex-col items-center gap-3 rounded-xl border-2 border-dashed border-gray-200 px-6 py-8 transition-colors hover:border-gray-300">
+                <Upload size={32} className="text-ink-3" strokeWidth={1.5} />
+                <div className="text-center">
+                  <div className="text-sm font-semibold">
+                    {uploading ? "Uploading..." : "Upload Sales By Item XLSX"}
+                  </div>
+                  <div className="text-ink-3 mt-1 text-xs">
+                    File date must match {today}
+                  </div>
+                </div>
+                <input
+                  type="file"
+                  accept=".xlsx"
+                  onChange={handleUpload}
+                  disabled={uploading}
+                  className="hidden"
+                />
+              </label>
+            )}
+
+            {uploadError && (
+              <div className="mt-3 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+                <AlertTriangle
+                  size={18}
+                  className="text-rush-red mt-0.5 shrink-0"
+                />
+                <div>
+                  <div className="text-rush-red text-sm font-semibold">
+                    Upload failed
+                  </div>
+                  <p className="text-ink-2 mt-0.5 text-sm">{uploadError}</p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {step === 2 && (
         <>
           <Card>
             <CardContent>
@@ -333,7 +468,7 @@ export function ClosingWizard({ today, existingStatus }: ClosingWizardProps) {
         </>
       )}
 
-      {step === 2 && (
+      {step === 3 && (
         <Card>
           <CardContent>
             <Label htmlFor="notes" className="mb-3 block">
@@ -349,13 +484,18 @@ export function ClosingWizard({ today, existingStatus }: ClosingWizardProps) {
               {(
                 [
                   ["Date", today],
-                  ["Total orders", totalOrders || "0"],
+                  ["Total orders", String(totalOrders)],
                   ["Gross sales", `${formatBhd(grossSales)} BHD`],
+                  ["Delivery sales", `${formatBhd(deliveryTotal)} BHD`],
                   ["Discount", `${formatBhd(num(discount))} BHD`],
                   ["Cash counted", `${formatBhd(countedTotal)} BHD`],
                   [
                     "Cash difference",
                     `${diff < 0 ? "−" : ""}${formatBhd(Math.abs(diff))} BHD`,
+                  ],
+                  [
+                    "Sales by Item",
+                    uploadSummary ? "Uploaded" : "Not uploaded",
                   ],
                 ] as [string, string][]
               ).map(([label, value], i) => (
@@ -396,7 +536,7 @@ export function ClosingWizard({ today, existingStatus }: ClosingWizardProps) {
           </Button>
           {step < STEPS.length - 1 ? (
             <Button variant="primary" size="lg" full onClick={next}>
-              Continue
+              {step === 1 && !uploadSummary ? "Skip / Continue" : "Continue"}
             </Button>
           ) : (
             <Button
@@ -411,6 +551,52 @@ export function ClosingWizard({ today, existingStatus }: ClosingWizardProps) {
             </Button>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function MethodRow({
+  label,
+  amount,
+  orders,
+  onAmount,
+  onOrders,
+}: {
+  label: string;
+  amount: string;
+  orders: string;
+  onAmount: (v: string) => void;
+  onOrders: (v: string) => void;
+}) {
+  return (
+    <div className="border-line-2 flex items-end gap-3 border-t py-2.5 first:border-t-0">
+      <div className="text-ink w-24 shrink-0 pb-2 text-sm font-semibold">
+        {label}
+      </div>
+      <div className="flex-1">
+        <Label className="text-ink-3 mb-1 block text-[11px]">Sales (BHD)</Label>
+        <Input
+          type="number"
+          min="0"
+          step="0.001"
+          value={amount}
+          onChange={(e) => onAmount(e.target.value)}
+          placeholder="0.000"
+          className="font-mono"
+        />
+      </div>
+      <div className="w-24 shrink-0">
+        <Label className="text-ink-3 mb-1 block text-[11px]">Orders</Label>
+        <Input
+          type="number"
+          min="0"
+          step="1"
+          value={orders}
+          onChange={(e) => onOrders(e.target.value.replace(/\D/g, ""))}
+          placeholder="0"
+          className="text-center font-mono"
+        />
       </div>
     </div>
   );

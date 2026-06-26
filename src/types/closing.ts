@@ -1,5 +1,13 @@
 import type { ReviewStatus } from "@/types/inventory";
 
+/** Per-platform delivery sales/orders captured in a closing. */
+export interface DeliveryClosingLine {
+  platformId: string;
+  platformName?: string;
+  salesFils: number;
+  orders: number;
+}
+
 /** A daily closing (EOD) — the official daily revenue + cash record. */
 export interface DailyClosing {
   id: string;
@@ -7,8 +15,11 @@ export interface DailyClosing {
   totalOrders: number;
   discountFils: number;
   cashSalesFils: number;
+  cashOrders: number;
   cardSalesFils: number;
+  cardOrders: number;
   benefitpaySalesFils: number;
+  benefitpayOrders: number;
   deliverySalesFils: number;
   /** cash + card + benefitpay + delivery. */
   grossSalesFils: number;

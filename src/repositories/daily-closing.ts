@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   DailyClosing,
   DailyClosingWithSubmitter,
+  DeliveryClosingLine,
 } from "@/types/closing";
 
 export interface InsertDailyClosingInput {
@@ -9,8 +10,11 @@ export interface InsertDailyClosingInput {
   totalOrders: number;
   discountFils: number;
   cashSalesFils: number;
+  cashOrders: number;
   cardSalesFils: number;
+  cardOrders: number;
   benefitpaySalesFils: number;
+  benefitpayOrders: number;
   deliverySalesFils: number;
   grossSalesFils: number;
   cashCountedFils: number;
@@ -31,8 +35,11 @@ export async function insertDailyClosing(
       total_orders: input.totalOrders,
       discount_fils: input.discountFils,
       cash_sales_fils: input.cashSalesFils,
+      cash_orders: input.cashOrders,
       card_sales_fils: input.cardSalesFils,
+      card_orders: input.cardOrders,
       benefitpay_sales_fils: input.benefitpaySalesFils,
+      benefitpay_orders: input.benefitpayOrders,
       delivery_sales_fils: input.deliverySalesFils,
       gross_sales_fils: input.grossSalesFils,
       cash_counted_fils: input.cashCountedFils,
@@ -47,6 +54,49 @@ export async function insertDailyClosing(
 
   if (error) throw error;
   return toDailyClosing(data);
+}
+
+export interface InsertDeliveryLineInput {
+  platformId: string;
+  salesFils: number;
+  orders: number;
+}
+
+export async function insertDeliveryClosingLines(
+  db: SupabaseClient,
+  closingId: string,
+  lines: InsertDeliveryLineInput[],
+): Promise<void> {
+  if (lines.length === 0) return;
+  const { error } = await db.from("daily_closing_delivery_lines").insert(
+    lines.map((l) => ({
+      closing_id: closingId,
+      platform_id: l.platformId,
+      sales_fils: l.salesFils,
+      orders: l.orders,
+    })),
+  );
+  if (error) throw error;
+}
+
+/** Per-platform delivery lines for a closing, with platform names. */
+export async function getDeliveryClosingLines(
+  db: SupabaseClient,
+  closingId: string,
+): Promise<DeliveryClosingLine[]> {
+  const { data, error } = await db
+    .from("daily_closing_delivery_lines")
+    .select("platform_id, sales_fils, orders, delivery_platforms(name)")
+    .eq("closing_id", closingId);
+
+  if (error) throw error;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data ?? []).map((row: any) => ({
+    platformId: row.platform_id,
+    platformName: row.delivery_platforms?.name ?? undefined,
+    salesFils: Number(row.sales_fils),
+    orders: Number(row.orders),
+  }));
 }
 
 export async function listDailyClosings(
@@ -165,8 +215,11 @@ function toDailyClosing(row: any): DailyClosing {
     totalOrders: Number(row.total_orders),
     discountFils: Number(row.discount_fils),
     cashSalesFils: Number(row.cash_sales_fils),
+    cashOrders: Number(row.cash_orders ?? 0),
     cardSalesFils: Number(row.card_sales_fils),
+    cardOrders: Number(row.card_orders ?? 0),
     benefitpaySalesFils: Number(row.benefitpay_sales_fils),
+    benefitpayOrders: Number(row.benefitpay_orders ?? 0),
     deliverySalesFils: Number(row.delivery_sales_fils),
     grossSalesFils: Number(row.gross_sales_fils),
     cashCountedFils: Number(row.cash_counted_fils),
