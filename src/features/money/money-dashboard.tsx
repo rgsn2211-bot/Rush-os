@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ExpenseForm } from "@/features/money/expense-form";
 import { CashMovementForm } from "@/features/money/cash-movement-form";
+import { TransferForm } from "@/features/money/transfer-form";
 import { SettlementForm } from "@/features/money/settlement-form";
 import { CashFlowView } from "@/features/money/cash-flow-view";
 import { RecurringForm } from "@/features/money/recurring-form";
@@ -45,7 +46,13 @@ interface Props {
 
 type Tab = "overview" | "cashflow" | "moneyout" | "cashlog" | "upcoming";
 type MoneyOutSub = "purchases" | "expenses" | "payables";
-type FormKind = "expense" | "movement" | "settlement" | "recurring" | null;
+type FormKind =
+  | "expense"
+  | "movement"
+  | "transfer"
+  | "settlement"
+  | "recurring"
+  | null;
 
 const TABS: { v: Tab; label: string }[] = [
   { v: "overview", label: "Overview" },
@@ -71,6 +78,8 @@ export function MoneyDashboard({
   if (form === "expense") return <ExpenseForm onDone={() => setForm(null)} />;
   if (form === "movement")
     return <CashMovementForm onDone={() => setForm(null)} />;
+  if (form === "transfer")
+    return <TransferForm onDone={() => setForm(null)} />;
   if (form === "settlement")
     return <SettlementForm onDone={() => setForm(null)} />;
   if (form === "recurring")
@@ -119,7 +128,9 @@ export function MoneyDashboard({
       {tab === "cashlog" && (
         <CashLog
           movements={cashMovements}
+          summary={summary}
           onNew={() => setForm("movement")}
+          onTransfer={() => setForm("transfer")}
           onRefresh={() => router.refresh()}
         />
       )}
@@ -410,11 +421,15 @@ function ExpenseListView({ expenses }: { expenses: ExpenseWithLines[] }) {
 
 function CashLog({
   movements,
+  summary,
   onNew,
+  onTransfer,
   onRefresh,
 }: {
   movements: CashMovement[];
+  summary: MoneySummary;
   onNew: () => void;
+  onTransfer: () => void;
   onRefresh: () => void;
 }) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -428,14 +443,36 @@ function CashLog({
 
   return (
     <div>
+      <div className="mb-4 grid grid-cols-3 gap-3.5">
+        <MetricCard
+          label="Register (cash)"
+          value={`${formatFils(summary.registerBalanceFils)} BHD`}
+          accent="var(--color-navy)"
+        />
+        <MetricCard
+          label="Bank account"
+          value={`${formatFils(summary.bankBalanceFils)} BHD`}
+        />
+        <MetricCard
+          label="Total money"
+          value={`${formatFils(summary.totalMoneyFils)} BHD`}
+          accent="var(--color-rush-green)"
+        />
+      </div>
       <div className="mb-4 flex items-center justify-between">
         <p className="text-ink-3 text-sm">
           Manual money in/out — the source of truth for cash position.
         </p>
-        <Button size="sm" onClick={onNew}>
-          <Plus size={15} className="mr-1" />
-          Add Movement
-        </Button>
+        <div className="flex gap-2">
+          <Button size="sm" variant="secondary" onClick={onTransfer}>
+            <ArrowUpRight size={15} className="mr-1" />
+            Deposit to Bank
+          </Button>
+          <Button size="sm" onClick={onNew}>
+            <Plus size={15} className="mr-1" />
+            Add Movement
+          </Button>
+        </div>
       </div>
 
       {movements.length === 0 ? (
@@ -463,7 +500,8 @@ function CashLog({
               <div className="min-w-0 flex-1">
                 <div className="text-[14.5px] font-semibold">{m.reason}</div>
                 <div className="text-ink-3 text-[12.5px]">
-                  {m.occurredOn} · {m.method}
+                  {m.occurredOn} · {m.method} ·{" "}
+                  {m.account === "bank" ? "Bank" : "Register"}
                   {m.affectsPl && " · affects P&L"}
                 </div>
               </div>

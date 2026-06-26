@@ -10,6 +10,7 @@ import type { Purchase } from "@/types/inventory";
 import type {
   ExpenseCreateInput,
   CashMovementCreateInput,
+  CashTransferInput,
   SettlementCreateInput,
   SettlementConfirmInput,
   RecurringCostCreateInput,
@@ -27,6 +28,8 @@ import {
   listCashMovements,
   deleteCashMovement,
   getCashPosition,
+  getRegisterBalance,
+  getBankBalance,
 } from "@/repositories/cash-movements";
 import { listPurchases, markPurchasePaid } from "@/repositories/purchases";
 import {
@@ -96,6 +99,42 @@ export async function recordCashMovement(
     method: input.method,
     occurredOn: input.occurredOn,
     affectsPl: input.affectsPl,
+    account: input.account,
+    note: input.note,
+    createdBy,
+  });
+}
+
+/**
+ * Move cash from the register to the bank (a deposit). Recorded as two linked
+ * movements: register `out` + bank `in`. Total money is unchanged; only the
+ * register/bank split shifts.
+ */
+export async function transferToBank(
+  db: SupabaseClient,
+  input: CashTransferInput,
+  createdBy: string,
+): Promise<void> {
+  const amountFils = bhdToFils(input.amountBhd);
+  await insertCashMovement(db, {
+    direction: "out",
+    reason: "Deposit to bank",
+    amountFils,
+    method: "Cash",
+    occurredOn: input.occurredOn,
+    affectsPl: false,
+    account: "register",
+    note: input.note,
+    createdBy,
+  });
+  await insertCashMovement(db, {
+    direction: "in",
+    reason: "Deposit from register",
+    amountFils,
+    method: "Bank transfer",
+    occurredOn: input.occurredOn,
+    affectsPl: false,
+    account: "bank",
     note: input.note,
     createdBy,
   });
@@ -313,21 +352,31 @@ export async function getMoneySummary(
 ): Promise<MoneySummary> {
   const { from, to } = monthBounds();
 
-  const [cashPositionFils, payables, expensesMonthFils, approvedPurchases] =
-    await Promise.all([
-      getCashPosition(db),
-      getPayables(db),
-      sumExpensesBetween(db, from, to),
-      getApprovedPurchases(db),
-    ]);
+  const [
+    registerBalanceFils,
+    bankBalanceFils,
+    payables,
+    expensesMonthFils,
+    approvedPurchases,
+  ] = await Promise.all([
+    getRegisterBalance(db),
+    getBankBalance(db),
+    getPayables(db),
+    sumExpensesBetween(db, from, to),
+    getApprovedPurchases(db),
+  ]);
 
+  const totalMoneyFils = registerBalanceFils + bankBalanceFils;
   const payablesFils = payables.reduce((sum, p) => sum + p.totalFils, 0);
   const inventoryPurchasesMonthFils = approvedPurchases
     .filter((p) => p.purchasedOn >= from && p.purchasedOn < to)
     .reduce((sum, p) => sum + p.totalFils, 0);
 
   return {
-    cashPositionFils,
+    cashPositionFils: totalMoneyFils,
+    registerBalanceFils,
+    bankBalanceFils,
+    totalMoneyFils,
     payablesFils,
     expensesMonthFils,
     inventoryPurchasesMonthFils,

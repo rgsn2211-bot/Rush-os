@@ -31,6 +31,7 @@ export function CashMovementForm({ onDone }: { onDone: () => void }) {
   const [reason, setReason] = useState(IN_REASONS[0]);
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("Cash");
+  const [account, setAccount] = useState<"register" | "bank">("register");
   const [occurredOn, setOccurredOn] = useState(today);
   const [affectsPl, setAffectsPl] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -58,6 +59,7 @@ export function CashMovementForm({ onDone }: { onDone: () => void }) {
         reason,
         amountBhd: Number(amount),
         method,
+        account,
         occurredOn,
         affectsPl,
       }),
@@ -132,6 +134,19 @@ export function CashMovementForm({ onDone }: { onDone: () => void }) {
                 placeholder="0.000"
                 className="font-mono"
               />
+            </div>
+            <div>
+              <Label htmlFor="cm-account">Account</Label>
+              <Select
+                id="cm-account"
+                value={account}
+                onChange={(e) =>
+                  setAccount(e.target.value as "register" | "bank")
+                }
+              >
+                <option value="register">Register (cash)</option>
+                <option value="bank">Bank account</option>
+              </Select>
             </div>
             <div>
               <Label htmlFor="cm-method">Method</Label>

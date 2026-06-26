@@ -55,6 +55,14 @@ export const cashMovementCreateSchema = z.object({
   method: z.string().min(1),
   occurredOn: dateStr,
   affectsPl: z.boolean().default(false),
+  account: z.enum(["register", "bank"]).default("register"),
   note: z.string().trim().optional(),
 });
 export type CashMovementCreateInput = z.infer<typeof cashMovementCreateSchema>;
+
+export const cashTransferSchema = z.object({
+  amountBhd: moneyBhd.refine((v) => v > 0, "Amount must be greater than 0"),
+  occurredOn: dateStr,
+  note: z.string().trim().optional(),
+});
+export type CashTransferInput = z.infer<typeof cashTransferSchema>;

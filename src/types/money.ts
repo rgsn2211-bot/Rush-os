@@ -45,6 +45,11 @@ export interface ExpenseWithLines extends Expense {
 
 export type CashDirection = "in" | "out";
 
+/** Where the money physically sits. */
+export type CashAccount = "register" | "bank";
+
+export const CASH_ACCOUNTS: CashAccount[] = ["register", "bank"];
+
 export interface CashMovement {
   id: string;
   direction: CashDirection;
@@ -53,6 +58,7 @@ export interface CashMovement {
   method: string;
   occurredOn: string;
   affectsPl: boolean;
+  account: CashAccount;
   note: string | null;
   createdBy: string | null;
   createdAt: string;
@@ -124,8 +130,14 @@ export interface CashFlowProjection {
 
 /** Computed metrics for the Money overview. */
 export interface MoneySummary {
-  /** Net of the cash log (money in − money out). */
+  /** Net of the cash log across all accounts (money in − money out). */
   cashPositionFils: number;
+  /** Net cash in the register. */
+  registerBalanceFils: number;
+  /** Net money in the bank account. */
+  bankBalanceFils: number;
+  /** Total money on hand: register + bank ("what I have"). */
+  totalMoneyFils: number;
   /** Unpaid, non-voided supplier purchases. */
   payablesFils: number;
   /** Expenses recorded this calendar month. */

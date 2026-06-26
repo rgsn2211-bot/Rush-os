@@ -8,6 +8,9 @@ export interface InsertCashMovementInput {
   method: string;
   occurredOn: string;
   affectsPl: boolean;
+  account?: "register" | "bank";
+  sourceType?: string;
+  sourceId?: string;
   note?: string;
   createdBy: string;
 }
@@ -25,6 +28,9 @@ export async function insertCashMovement(
       method: input.method,
       occurred_on: input.occurredOn,
       affects_pl: input.affectsPl,
+      account: input.account ?? "register",
+      source_type: input.sourceType ?? null,
+      source_id: input.sourceId ?? null,
       note: input.note ?? null,
       created_by: input.createdBy,
     })
@@ -56,18 +62,67 @@ export async function deleteCashMovement(
   if (error) throw error;
 }
 
-/** Net of the cash log: Σ money-in − Σ money-out, in fils. */
+/** Net of the cash log across all accounts: Σ money-in − Σ money-out, in fils. */
 export async function getCashPosition(db: SupabaseClient): Promise<number> {
-  const { data, error } = await db
-    .from("cash_movements")
-    .select("direction, amount_fils");
+  return sumBalance(db);
+}
+
+/** Net cash in the register, in fils. */
+export async function getRegisterBalance(db: SupabaseClient): Promise<number> {
+  return sumBalance(db, "register");
+}
+
+/** Net money in the bank account, in fils. */
+export async function getBankBalance(db: SupabaseClient): Promise<number> {
+  return sumBalance(db, "bank");
+}
+
+/** Sum money-in − money-out, optionally restricted to one account. */
+async function sumBalance(
+  db: SupabaseClient,
+  account?: "register" | "bank",
+): Promise<number> {
+  let query = db.from("cash_movements").select("direction, amount_fils");
+  if (account) query = query.eq("account", account);
+  const { data, error } = await query;
 
   if (error) throw error;
   return data.reduce(
     (sum, r) =>
-      sum + (r.direction === "in" ? Number(r.amount_fils) : -Number(r.amount_fils)),
+      sum +
+      (r.direction === "in" ? Number(r.amount_fils) : -Number(r.amount_fils)),
     0,
   );
+}
+
+/** Find movements posted by a given source (for idempotency / reversal). */
+export async function findCashMovementsBySource(
+  db: SupabaseClient,
+  sourceType: string,
+  sourceId: string,
+): Promise<CashMovement[]> {
+  const { data, error } = await db
+    .from("cash_movements")
+    .select("*")
+    .eq("source_type", sourceType)
+    .eq("source_id", sourceId);
+
+  if (error) throw error;
+  return data.map(toCashMovement);
+}
+
+/** Delete all movements posted by a given source (used when reversing). */
+export async function deleteCashMovementsBySource(
+  db: SupabaseClient,
+  sourceType: string,
+  sourceId: string,
+): Promise<void> {
+  const { error } = await db
+    .from("cash_movements")
+    .delete()
+    .eq("source_type", sourceType)
+    .eq("source_id", sourceId);
+  if (error) throw error;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -80,6 +135,7 @@ function toCashMovement(row: any): CashMovement {
     method: row.method,
     occurredOn: row.occurred_on,
     affectsPl: row.affects_pl,
+    account: row.account ?? "register",
     note: row.note,
     createdBy: row.created_by,
     createdAt: row.created_at,
