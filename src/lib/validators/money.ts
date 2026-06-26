@@ -48,6 +48,15 @@ export const settlementConfirmSchema = z.object({
 });
 export type SettlementConfirmInput = z.infer<typeof settlementConfirmSchema>;
 
+export const settlementReconcileSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1, "Select at least one settlement"),
+  receivedTotalBhd: moneyBhd,
+  receivedOn: dateStr,
+});
+export type SettlementReconcileInput = z.infer<
+  typeof settlementReconcileSchema
+>;
+
 export const cashMovementCreateSchema = z.object({
   direction: z.enum(["in", "out"]),
   reason: z.string().min(1, "Reason required"),

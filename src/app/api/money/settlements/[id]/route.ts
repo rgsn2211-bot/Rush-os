@@ -9,7 +9,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const db = await createClient();
-  await requireOwner(db);
+  const authUser = await requireOwner(db);
   const { id } = await params;
 
   const body = await request.json();
@@ -19,7 +19,7 @@ export async function PATCH(
   }
 
   try {
-    await confirmSettlement(db, id, parsed.data);
+    await confirmSettlement(db, id, parsed.data, authUser.id);
     return Response.json({ success: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to confirm";

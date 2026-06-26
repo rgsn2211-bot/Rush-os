@@ -286,19 +286,97 @@ export async function confirmSettlement(
   db: SupabaseClient,
   id: string,
   input: SettlementConfirmInput,
+  createdBy: string,
 ): Promise<void> {
   const existing = await getSettlement(db, id);
   if (!existing) throw new Error("Settlement not found");
   if (existing.status === "received") {
     throw new Error("Settlement already confirmed");
   }
+  const actualFils = bhdToFils(input.actualBhd);
   await confirmSettlementReceived(
     db,
     id,
-    bhdToFils(input.actualBhd),
+    actualFils,
     input.feeBhd === undefined ? existing.feeFils : bhdToFils(input.feeBhd),
     input.receivedOn,
   );
+
+  // Money has arrived in the bank — post it so total money updates.
+  if (actualFils > 0) {
+    await insertCashMovement(db, {
+      direction: "in",
+      reason: `Settlement received — ${existing.platform ?? existing.channel}`,
+      amountFils: actualFils,
+      method: "Bank transfer",
+      occurredOn: input.receivedOn,
+      affectsPl: false,
+      account: "bank",
+      sourceType: "settlement",
+      sourceId: id,
+      createdBy,
+    });
+  }
+}
+
+/**
+ * Reconcile several pending settlements at once (e.g. all of one platform's
+ * days, paid together). The owner enters the total actually received; it is
+ * distributed across the selected settlements proportionally to expected, and
+ * the shortfall on each becomes its fee/commission. One bank cash-in is posted
+ * for the total received.
+ */
+export async function reconcileSettlements(
+  db: SupabaseClient,
+  ids: string[],
+  receivedTotalBhd: number,
+  receivedOn: string,
+  createdBy: string,
+): Promise<void> {
+  if (ids.length === 0) throw new Error("Select at least one settlement");
+
+  const settlements: Settlement[] = [];
+  for (const id of ids) {
+    const s = await getSettlement(db, id);
+    if (!s) throw new Error("Settlement not found");
+    if (s.status === "received") {
+      throw new Error("A selected settlement is already received");
+    }
+    settlements.push(s);
+  }
+
+  const receivedTotalFils = bhdToFils(receivedTotalBhd);
+  const expectedTotal = settlements.reduce((sum, s) => sum + s.expectedFils, 0);
+
+  let allocated = 0;
+  for (let i = 0; i < settlements.length; i++) {
+    const s = settlements[i];
+    const isLast = i === settlements.length - 1;
+    // Last row absorbs the rounding remainder so shares sum to the total.
+    const share = isLast
+      ? receivedTotalFils - allocated
+      : expectedTotal > 0
+        ? Math.round((receivedTotalFils * s.expectedFils) / expectedTotal)
+        : 0;
+    allocated += share;
+    const feeFils = Math.max(0, s.expectedFils - share);
+    await confirmSettlementReceived(db, s.id, share, feeFils, receivedOn);
+  }
+
+  if (receivedTotalFils > 0) {
+    const dayCount = settlements.length;
+    await insertCashMovement(db, {
+      direction: "in",
+      reason: `Settlement payout (${dayCount} day${dayCount !== 1 ? "s" : ""})`,
+      amountFils: receivedTotalFils,
+      method: "Bank transfer",
+      occurredOn: receivedOn,
+      affectsPl: false,
+      account: "bank",
+      sourceType: "settlement_reconcile",
+      createdBy,
+    });
+  }
 }
 
 export async function removeSettlement(

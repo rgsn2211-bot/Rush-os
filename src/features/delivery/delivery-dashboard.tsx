@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { DeliveryPlatform } from "@/types/delivery";
+import type { Settlement } from "@/types/money";
 import { formatFils } from "@/lib/calculations/currency";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/card";
@@ -9,10 +10,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PlatformForm } from "@/features/delivery/platform-form";
+import { SettlementReconcile } from "@/features/delivery/settlement-reconcile";
 import { Plus, Pencil } from "lucide-react";
 
 interface Props {
   platforms: DeliveryPlatform[];
+  settlements: Settlement[];
 }
 
 type Tab = "settings" | "report" | "settlement";
@@ -23,7 +26,7 @@ const TABS: { v: Tab; label: string }[] = [
   { v: "settlement", label: "Settlement" },
 ];
 
-export function DeliveryDashboard({ platforms }: Props) {
+export function DeliveryDashboard({ platforms, settlements }: Props) {
   const [tab, setTab] = useState<Tab>("settings");
   const [editing, setEditing] = useState<DeliveryPlatform | null>(null);
   const [adding, setAdding] = useState(false);
@@ -62,11 +65,9 @@ export function DeliveryDashboard({ platforms }: Props) {
           onEdit={setEditing}
         />
       )}
-      {tab === "report" && (
-        <EmptyState message="Per-platform sales & commission report — coming with settlement reconciliation." />
-      )}
+      {tab === "report" && <Report settlements={settlements} />}
       {tab === "settlement" && (
-        <EmptyState message="Settlement reconciliation — coming next. Expected payouts are created automatically when EOD is approved." />
+        <SettlementReconcile settlements={settlements} />
       )}
     </div>
   );
@@ -131,6 +132,91 @@ function Settings({
           ))}
         </Card>
       )}
+    </div>
+  );
+}
+
+interface PlatformAgg {
+  platform: string;
+  grossFils: number;
+  commissionFils: number;
+  expectedFils: number;
+  receivedFils: number;
+  pendingFils: number;
+}
+
+function Report({ settlements }: { settlements: Settlement[] }) {
+  const byPlatform = new Map<string, PlatformAgg>();
+  for (const s of settlements) {
+    const key = s.platform ?? "Delivery";
+    const agg =
+      byPlatform.get(key) ??
+      {
+        platform: key,
+        grossFils: 0,
+        commissionFils: 0,
+        expectedFils: 0,
+        receivedFils: 0,
+        pendingFils: 0,
+      };
+    agg.grossFils += s.grossFils ?? 0;
+    agg.commissionFils += s.feeFils ?? 0;
+    agg.expectedFils += s.expectedFils;
+    if (s.status === "received") agg.receivedFils += s.actualFils ?? 0;
+    else agg.pendingFils += s.expectedFils;
+    byPlatform.set(key, agg);
+  }
+
+  const rows = [...byPlatform.values()].sort((a, b) => b.grossFils - a.grossFils);
+
+  if (rows.length === 0) {
+    return (
+      <EmptyState message="No delivery sales yet. Figures appear here after you approve daily closings with delivery sales." />
+    );
+  }
+
+  return (
+    <div>
+      <p className="text-ink-3 mb-4 text-sm">
+        Per-platform totals across all approved days. Commission is what the
+        platforms keep; net is what you should receive.
+      </p>
+      <Card className="overflow-x-auto p-0">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-line-2 text-ink-3 border-b text-left text-xs">
+              <th className="px-4 py-3 font-semibold">Platform</th>
+              <th className="px-4 py-3 text-right font-semibold">Gross</th>
+              <th className="px-4 py-3 text-right font-semibold">Commission</th>
+              <th className="px-4 py-3 text-right font-semibold">Net expected</th>
+              <th className="px-4 py-3 text-right font-semibold">Received</th>
+              <th className="px-4 py-3 text-right font-semibold">Pending</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.platform} className="border-line-2 border-b last:border-0">
+                <td className="px-4 py-3 font-semibold">{r.platform}</td>
+                <td className="px-4 py-3 text-right font-mono">
+                  {formatFils(r.grossFils)}
+                </td>
+                <td className="text-rush-red px-4 py-3 text-right font-mono">
+                  {formatFils(r.commissionFils)}
+                </td>
+                <td className="px-4 py-3 text-right font-mono font-bold">
+                  {formatFils(r.expectedFils)}
+                </td>
+                <td className="text-rush-green px-4 py-3 text-right font-mono">
+                  {formatFils(r.receivedFils)}
+                </td>
+                <td className="text-ink-2 px-4 py-3 text-right font-mono">
+                  {formatFils(r.pendingFils)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
     </div>
   );
 }
