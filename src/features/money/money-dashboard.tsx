@@ -107,7 +107,12 @@ export function MoneyDashboard({
       </div>
 
       {tab === "overview" && (
-        <Overview summary={summary} onForm={setForm} onTab={setTab} />
+        <Overview
+          summary={summary}
+          projection={projection}
+          onForm={setForm}
+          onTab={setTab}
+        />
       )}
       {tab === "cashflow" && (
         <CashFlowView
@@ -146,19 +151,52 @@ export function MoneyDashboard({
 
 function Overview({
   summary,
+  projection,
   onForm,
   onTab,
 }: {
   summary: MoneySummary;
+  projection: CashFlowProjection;
   onForm: (f: FormKind) => void;
   onTab: (t: Tab) => void;
 }) {
+  const shouldHaveFils = summary.totalMoneyFils + projection.expectedIncomingFils;
   return (
     <div>
-      <div className="mb-6 grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+      {/* What I have */}
+      <div className="text-ink-3 mb-2 text-xs font-bold tracking-wider uppercase">
+        Money I have
+      </div>
+      <div className="mb-5 grid grid-cols-3 gap-3.5">
         <MetricCard
-          label="Cash position"
-          value={`${formatFils(summary.cashPositionFils)} BHD`}
+          label="Register (cash)"
+          value={`${formatFils(summary.registerBalanceFils)} BHD`}
+          accent="var(--color-navy)"
+        />
+        <MetricCard
+          label="Bank account"
+          value={`${formatFils(summary.bankBalanceFils)} BHD`}
+        />
+        <MetricCard
+          label="Total money"
+          value={`${formatFils(summary.totalMoneyFils)} BHD`}
+          accent="var(--color-rush-green)"
+        />
+      </div>
+
+      {/* What I should have */}
+      <div className="text-ink-3 mb-2 text-xs font-bold tracking-wider uppercase">
+        What I should have
+      </div>
+      <div className="mb-6 grid grid-cols-3 gap-3.5">
+        <MetricCard
+          label="Still owed (settlements)"
+          value={`${formatFils(projection.expectedIncomingFils)} BHD`}
+          accent="var(--color-rush-amber)"
+        />
+        <MetricCard
+          label="Should have (have + owed)"
+          value={`${formatFils(shouldHaveFils)} BHD`}
           accent="var(--color-navy)"
         />
         <MetricCard
@@ -166,6 +204,9 @@ function Overview({
           value={`${formatFils(summary.payablesFils)} BHD`}
           accent="var(--color-rush-red)"
         />
+      </div>
+
+      <div className="mb-6 grid grid-cols-2 gap-3.5">
         <MetricCard
           label="Expenses (month)"
           value={`${formatFils(summary.expensesMonthFils)} BHD`}
@@ -199,9 +240,10 @@ function Overview({
             />
           </div>
           <p className="text-ink-3 mt-4 text-xs leading-relaxed">
-            Cash position is the running net of the Cash Log (money in − money
-            out). Record daily cash deposits, owner injections and withdrawals
-            there to keep it accurate.
+            Total money is your register plus bank, tracked in the Cash Log.
+            Approving a daily closing adds cash sales to the register and creates
+            the settlements you&apos;re still owed; reconciling them moves the
+            money into the bank.
           </p>
         </CardContent>
       </Card>
