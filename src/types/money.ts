@@ -115,6 +115,14 @@ export interface Settlement {
   receivedOn: string | null;
   status: SettlementStatus;
   note: string | null;
+  /** Sales date this settlement came from (auto settlements). */
+  salesDate: string | null;
+  /** Pre-fee gross for the day (delivery auto settlements). */
+  grossFils: number | null;
+  /** The daily closing that created this settlement, if auto. */
+  sourceClosingId: string | null;
+  /** True when created automatically from an approved EOD. */
+  autoCreated: boolean;
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;

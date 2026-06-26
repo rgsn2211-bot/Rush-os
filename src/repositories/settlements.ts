@@ -8,6 +8,10 @@ export interface InsertSettlementInput {
   expectedFils: number;
   feeFils?: number;
   note?: string;
+  salesDate?: string;
+  grossFils?: number;
+  sourceClosingId?: string;
+  autoCreated?: boolean;
   createdBy: string;
 }
 
@@ -24,6 +28,10 @@ export async function insertSettlement(
       expected_fils: input.expectedFils,
       fee_fils: input.feeFils ?? null,
       note: input.note ?? null,
+      sales_date: input.salesDate ?? null,
+      gross_fils: input.grossFils ?? null,
+      source_closing_id: input.sourceClosingId ?? null,
+      auto_created: input.autoCreated ?? false,
       created_by: input.createdBy,
     })
     .select("*")
@@ -31,6 +39,33 @@ export async function insertSettlement(
 
   if (error) throw error;
   return toSettlement(data);
+}
+
+/** Settlements created by a given closing (for reversal on void). */
+export async function listSettlementsByClosing(
+  db: SupabaseClient,
+  closingId: string,
+): Promise<Settlement[]> {
+  const { data, error } = await db
+    .from("settlements")
+    .select("*")
+    .eq("source_closing_id", closingId);
+
+  if (error) throw error;
+  return data.map(toSettlement);
+}
+
+/** Delete the still-pending settlements created by a closing. */
+export async function deletePendingSettlementsByClosing(
+  db: SupabaseClient,
+  closingId: string,
+): Promise<void> {
+  const { error } = await db
+    .from("settlements")
+    .delete()
+    .eq("source_closing_id", closingId)
+    .eq("status", "pending");
+  if (error) throw error;
 }
 
 export async function listSettlements(
@@ -114,6 +149,10 @@ function toSettlement(row: any): Settlement {
     receivedOn: row.received_on,
     status: row.status,
     note: row.note,
+    salesDate: row.sales_date ?? null,
+    grossFils: row.gross_fils === null ? null : Number(row.gross_fils),
+    sourceClosingId: row.source_closing_id ?? null,
+    autoCreated: row.auto_created ?? false,
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

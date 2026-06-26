@@ -8,6 +8,7 @@ import { bhdToFils } from "@/lib/calculations/currency";
 import {
   insertDailyClosing,
   insertDeliveryClosingLines,
+  getDeliveryClosingLines,
   listDailyClosings,
   listPendingDailyClosings,
   getDailyClosingByDate,
@@ -15,6 +16,9 @@ import {
   updateDailyClosingStatus,
   deleteDailyClosing,
 } from "@/repositories/daily-closing";
+import { insertCashMovement } from "@/repositories/cash-movements";
+import { insertSettlement } from "@/repositories/settlements";
+import { getPlatforms, platformFeeFils } from "@/services/delivery";
 
 /**
  * Worker submits the end-of-day closing. Money arrives in BHD and is converted
@@ -124,7 +128,9 @@ export async function deleteOwnClosing(
 
 /**
  * Owner reviews a closing. Approving finalizes it as the official record for the
- * day; rejecting voids it (the worker can then resubmit a corrected closing).
+ * day AND moves money: the day's cash sales land in the register, and pending
+ * settlements ("money I should receive") are created per channel/platform.
+ * Rejecting voids it (the worker can then resubmit a corrected closing).
  * No inventory effect — Daily EOD is the revenue record, not a stock movement.
  */
 export async function reviewClosing(
@@ -139,6 +145,88 @@ export async function reviewClosing(
     throw new Error("Closing is not pending review");
   }
 
-  const newStatus = action === "approve" ? "approved" : "voided";
-  await updateDailyClosingStatus(db, id, newStatus, reviewedBy);
+  if (action === "reject") {
+    await updateDailyClosingStatus(db, id, "voided", reviewedBy);
+    return;
+  }
+
+  await updateDailyClosingStatus(db, id, "approved", reviewedBy);
+  await postApprovalEffects(db, closing, reviewedBy);
+}
+
+/**
+ * Money effects of approving a closing. Idempotent via source tags. Cash sales
+ * become a register cash-in; card / BenefitPay / each delivery platform get a
+ * pending settlement for what the shop should receive (delivery net of the
+ * owner-set commission + per-order fee).
+ */
+async function postApprovalEffects(
+  db: SupabaseClient,
+  closing: DailyClosing,
+  reviewedBy: string,
+): Promise<void> {
+  const date = closing.reportDate;
+
+  if (closing.cashSalesFils > 0) {
+    await insertCashMovement(db, {
+      direction: "in",
+      reason: `Cash sales — ${date}`,
+      amountFils: closing.cashSalesFils,
+      method: "Cash",
+      occurredOn: date,
+      affectsPl: false,
+      account: "register",
+      sourceType: "daily_closing",
+      sourceId: closing.id,
+      createdBy: reviewedBy,
+    });
+  }
+
+  const makeSettlement = (
+    channel: "card" | "benefitpay" | "delivery",
+    expectedFils: number,
+    extra: { platform?: string; grossFils?: number; feeFils?: number } = {},
+  ) =>
+    insertSettlement(db, {
+      channel,
+      platform: extra.platform,
+      periodLabel: date,
+      expectedFils,
+      feeFils: extra.feeFils,
+      grossFils: extra.grossFils,
+      salesDate: date,
+      sourceClosingId: closing.id,
+      autoCreated: true,
+      createdBy: reviewedBy,
+    });
+
+  if (closing.cardSalesFils > 0) {
+    await makeSettlement("card", closing.cardSalesFils, {
+      grossFils: closing.cardSalesFils,
+    });
+  }
+  if (closing.benefitpaySalesFils > 0) {
+    await makeSettlement("benefitpay", closing.benefitpaySalesFils, {
+      grossFils: closing.benefitpaySalesFils,
+    });
+  }
+
+  const lines = await getDeliveryClosingLines(db, closing.id);
+  if (lines.length > 0) {
+    const platforms = await getPlatforms(db);
+    const byId = new Map(platforms.map((p) => [p.id, p]));
+    for (const line of lines) {
+      if (line.salesFils <= 0) continue;
+      const p = byId.get(line.platformId);
+      const fee = p
+        ? platformFeeFils(line.salesFils, line.orders, p.commissionBps, p.fixedFeeFils)
+        : 0;
+      const expected = Math.max(0, line.salesFils - fee);
+      await makeSettlement("delivery", expected, {
+        platform: line.platformName ?? p?.name,
+        grossFils: line.salesFils,
+        feeFils: fee,
+      });
+    }
+  }
 }
