@@ -69,7 +69,9 @@ Supabase + Vercel.
 - Inventory management (owner CRUD, worker read-only view, alerts)
 - Products + recipes (owner CRUD, linked to inventory items)
 - Suppliers (owner CRUD, worker read-only)
-- Purchases / receive stock (worker submit → owner review)
+- Purchases / receive stock (worker submit → owner review; marking paid
+  requires choosing cash/bank and auto-deducts from that account; worker
+  cash purchases deduct from register on owner approval)
 - POS import pipeline (XLSX upload → item mapping → inventory deduction)
 - POS upload calendar (interactive date selection, date validation)
 - Complimentary logging (worker picks product or "Other", logs with reason,
@@ -91,7 +93,9 @@ Supabase + Vercel.
   projection), Money Out (purchases / expenses / payables), Cash Log (manual
   movements per account + register→bank deposit), Upcoming Costs (recurring).
   Money lives in two accounts: register and bank. Confirming/reconciling a
-  settlement posts the received amount into the bank.
+  settlement posts the received amount into the bank. Recording an expense
+  auto-deducts from the appropriate account (Cash → register, others → bank);
+  deleting an expense reverses the deduction.
 - Owner mobile "More" menu (slide-up sheet for pages not in bottom nav)
 
 **Not yet built (placeholders only):**

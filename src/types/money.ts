@@ -31,6 +31,7 @@ export interface Expense {
   id: string;
   spentOn: string;
   method: string;
+  account: CashAccount;
   note: string | null;
   receiptPath: string | null;
   totalFils: number;

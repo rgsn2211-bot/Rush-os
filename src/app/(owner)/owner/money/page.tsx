@@ -45,6 +45,7 @@ export default async function MoneyPage() {
       : "Cash purchase",
     purchasedOn: p.purchasedOn,
     isPaid: p.isPaid,
+    paidMethod: p.paidMethod,
     dueDate: p.dueDate,
     totalFils: p.totalFils,
   }));

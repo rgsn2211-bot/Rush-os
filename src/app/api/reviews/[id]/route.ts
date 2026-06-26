@@ -9,7 +9,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const db = await createClient();
-  await requireOwner(db);
+  const authUser = await requireOwner(db);
 
   const { id } = await params;
   const body = await request.json();
@@ -18,7 +18,7 @@ export async function PATCH(
     return Response.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  await approvePurchase(db, id, parsed.data);
+  await approvePurchase(db, id, parsed.data, authUser.id);
   return Response.json({ ok: true });
 }
 

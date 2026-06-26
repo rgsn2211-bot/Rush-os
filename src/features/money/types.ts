@@ -4,6 +4,7 @@ export interface PurchaseRow {
   supplierName: string;
   purchasedOn: string;
   isPaid: boolean;
+  paidMethod: "cash" | "bank" | null;
   dueDate: string | null;
   totalFils: number;
 }

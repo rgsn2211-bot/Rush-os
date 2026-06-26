@@ -30,8 +30,13 @@ import {
   getCashPosition,
   getRegisterBalance,
   getBankBalance,
+  deleteCashMovementsBySource,
 } from "@/repositories/cash-movements";
-import { listPurchases, markPurchasePaid } from "@/repositories/purchases";
+import {
+  listPurchases,
+  getPurchase,
+  markPurchasePaid,
+} from "@/repositories/purchases";
 import {
   insertSettlement,
   listSettlements,
@@ -50,6 +55,10 @@ import {
 
 // ---------- Expenses --------------------------------------------------------
 
+function expenseMethodToAccount(method: string): "register" | "bank" {
+  return method === "Cash" ? "register" : "bank";
+}
+
 export async function recordExpense(
   db: SupabaseClient,
   input: ExpenseCreateInput,
@@ -61,15 +70,34 @@ export async function recordExpense(
     description: l.description,
   }));
   const totalFils = lines.reduce((sum, l) => sum + l.amountFils, 0);
+  const account = expenseMethodToAccount(input.method);
 
-  return insertExpense(db, {
+  const expense = await insertExpense(db, {
     spentOn: input.spentOn,
     method: input.method,
+    account,
     note: input.note,
     totalFils,
     createdBy,
     lines,
   });
+
+  if (totalFils > 0) {
+    await insertCashMovement(db, {
+      direction: "out",
+      reason: `Expense — ${input.method}`,
+      amountFils: totalFils,
+      method: input.method,
+      occurredOn: input.spentOn,
+      affectsPl: true,
+      account,
+      sourceType: "expense",
+      sourceId: expense.id,
+      createdBy,
+    });
+  }
+
+  return expense;
 }
 
 export async function getAllExpenses(
@@ -82,6 +110,7 @@ export async function removeExpense(
   db: SupabaseClient,
   id: string,
 ): Promise<void> {
+  await deleteCashMovementsBySource(db, "expense", id);
   return deleteExpense(db, id);
 }
 
@@ -172,8 +201,30 @@ export async function getPayables(db: SupabaseClient): Promise<Purchase[]> {
 export async function payPurchase(
   db: SupabaseClient,
   id: string,
+  paidMethod: "cash" | "bank",
+  createdBy: string,
 ): Promise<void> {
-  await markPurchasePaid(db, id);
+  const purchase = await getPurchase(db, id);
+  if (!purchase) throw new Error("Purchase not found");
+  if (purchase.isPaid) throw new Error("Purchase is already paid");
+
+  await markPurchasePaid(db, id, paidMethod);
+
+  const account = paidMethod === "cash" ? "register" : "bank";
+  if (purchase.totalFils > 0) {
+    await insertCashMovement(db, {
+      direction: "out",
+      reason: "Purchase payment",
+      amountFils: purchase.totalFils,
+      method: paidMethod === "cash" ? "Cash" : "Bank transfer",
+      occurredOn: new Date().toISOString().split("T")[0],
+      affectsPl: false,
+      account,
+      sourceType: "purchase_payment",
+      sourceId: id,
+      createdBy,
+    });
+  }
 }
 
 // ---------- Recurring / upcoming costs --------------------------------------
@@ -234,9 +285,12 @@ export async function markRecurringPaid(
   const cost = await getRecurringCost(db, id);
   if (!cost) throw new Error("Recurring cost not found");
 
-  await insertExpense(db, {
-    spentOn: new Date().toISOString().split("T")[0],
+  const account = expenseMethodToAccount(cost.defaultMethod);
+  const spentOn = new Date().toISOString().split("T")[0];
+  const expense = await insertExpense(db, {
+    spentOn,
     method: cost.defaultMethod,
+    account,
     note: `${cost.name} (recurring)`,
     totalFils: cost.amountFils,
     createdBy,
@@ -248,6 +302,21 @@ export async function markRecurringPaid(
       },
     ],
   });
+
+  if (cost.amountFils > 0) {
+    await insertCashMovement(db, {
+      direction: "out",
+      reason: `Expense — ${cost.defaultMethod}`,
+      amountFils: cost.amountFils,
+      method: cost.defaultMethod,
+      occurredOn: spentOn,
+      affectsPl: true,
+      account,
+      sourceType: "expense",
+      sourceId: expense.id,
+      createdBy,
+    });
+  }
 
   if (cost.frequency === "One-time") {
     await updateRecurringCost(db, id, { active: false });

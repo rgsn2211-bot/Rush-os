@@ -140,10 +140,11 @@ export async function approvePurchaseRecord(
 export async function markPurchasePaid(
   db: SupabaseClient,
   id: string,
+  paidMethod: "cash" | "bank",
 ): Promise<void> {
   const { error } = await db
     .from("purchases")
-    .update({ is_paid: true })
+    .update({ is_paid: true, paid_method: paidMethod })
     .eq("id", id);
 
   if (error) throw error;
@@ -206,6 +207,7 @@ function toPurchase(row: any): Purchase {
     supplierId: row.supplier_id,
     purchasedOn: row.purchased_on,
     isPaid: row.is_paid,
+    paidMethod: row.paid_method ?? null,
     dueDate: row.due_date,
     totalFils: Number(row.total_fils),
     imagePath: row.image_path,

@@ -20,9 +20,14 @@ import {
   voidPurchase,
   approvePurchaseRecord,
   updatePurchaseItemCost,
+  markPurchasePaid,
 } from "@/repositories/purchases";
 import { getInventoryItem, adjustStock } from "@/repositories/inventory-items";
 import { listInventoryItemsOps } from "@/repositories/worker-inventory";
+import {
+  insertCashMovement,
+  deleteCashMovementsBySource,
+} from "@/repositories/cash-movements";
 import { purchaseToBaseQty, receiveStock } from "@/lib/calculations/costing";
 
 export async function getAllPurchases(
@@ -105,6 +110,23 @@ export async function recordPurchase(
       );
       await adjustStock(db, d.item.id, newStock.baseQty, newStock.valueFils);
     }
+
+    if (input.isPaid && input.paidMethod && totalFils > 0) {
+      const account = input.paidMethod === "cash" ? "register" : "bank";
+      await insertCashMovement(db, {
+        direction: "out",
+        reason: "Purchase payment",
+        amountFils: totalFils,
+        method: input.paidMethod === "cash" ? "Cash" : "Bank transfer",
+        occurredOn: input.purchasedOn ?? new Date().toISOString().split("T")[0],
+        affectsPl: false,
+        account,
+        sourceType: "purchase_payment",
+        sourceId: purchase.id,
+        createdBy,
+      });
+      await markPurchasePaid(db, purchase.id, input.paidMethod);
+    }
   }
 
   return { purchase, items };
@@ -120,6 +142,7 @@ export async function approvePurchase(
   db: SupabaseClient,
   purchaseId: string,
   input: PurchaseApproveInput,
+  reviewedBy: string,
 ): Promise<void> {
   const existing = await getPurchaseWithItems(db, purchaseId);
   if (!existing) throw new Error("Purchase not found");
@@ -155,6 +178,22 @@ export async function approvePurchase(
   }
 
   await approvePurchaseRecord(db, purchaseId, totalFils);
+
+  if (existing.purchase.isPaid && totalFils > 0) {
+    await insertCashMovement(db, {
+      direction: "out",
+      reason: "Purchase payment",
+      amountFils: totalFils,
+      method: "Cash",
+      occurredOn: existing.purchase.purchasedOn,
+      affectsPl: false,
+      account: "register",
+      sourceType: "purchase_payment",
+      sourceId: purchaseId,
+      createdBy: reviewedBy,
+    });
+    await markPurchasePaid(db, purchaseId, "cash");
+  }
 }
 
 export async function rejectPurchase(
@@ -191,6 +230,7 @@ export async function cancelPurchase(
     );
   }
 
+  await deleteCashMovementsBySource(db, "purchase_payment", id);
   await voidPurchase(db, id);
 }
 

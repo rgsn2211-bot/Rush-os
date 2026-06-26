@@ -68,11 +68,14 @@ export interface RecipeIngredient {
   createdAt: string;
 }
 
+export type PaidMethod = "cash" | "bank";
+
 export interface Purchase {
   id: string;
   supplierId: string | null;
   purchasedOn: string;
   isPaid: boolean;
+  paidMethod: PaidMethod | null;
   dueDate: string | null;
   totalFils: number;
   imagePath: string | null;

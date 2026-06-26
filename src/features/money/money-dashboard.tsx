@@ -293,9 +293,13 @@ function MoneyOut({
   const [sub, setSub] = useState<MoneyOutSub>("purchases");
   const [payingId, setPayingId] = useState<string | null>(null);
 
-  async function pay(id: string) {
+  async function pay(id: string, method: "cash" | "bank") {
     setPayingId(id);
-    await fetch(`/api/money/purchases/${id}/pay`, { method: "POST" });
+    await fetch(`/api/money/purchases/${id}/pay`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paidMethod: method }),
+    });
     setPayingId(null);
     onRefresh();
   }
@@ -347,10 +351,12 @@ function PurchaseTable({
   emptyMessage = "No purchases yet.",
 }: {
   rows: PurchaseRow[];
-  onPay: (id: string) => void;
+  onPay: (id: string, method: "cash" | "bank") => void;
   payingId: string | null;
   emptyMessage?: string;
 }) {
+  const [choosingId, setChoosingId] = useState<string | null>(null);
+
   if (rows.length === 0) return <EmptyState message={emptyMessage} />;
   return (
     <Card className="p-0">
@@ -366,7 +372,9 @@ function PurchaseTable({
             <div className="text-ink-3 text-[13px]">{p.purchasedOn}</div>
           </div>
           {p.isPaid ? (
-            <Badge variant="green">Paid</Badge>
+            <Badge variant="green">
+              Paid{p.paidMethod ? ` (${p.paidMethod})` : ""}
+            </Badge>
           ) : (
             <Badge variant="amber">
               {p.dueDate ? `Due ${p.dueDate}` : "Unpaid"}
@@ -375,15 +383,44 @@ function PurchaseTable({
           <div className="text-ink w-28 text-right font-mono text-sm font-bold">
             {formatFils(p.totalFils)}
           </div>
-          {!p.isPaid && (
+          {!p.isPaid && choosingId !== p.id && (
             <Button
               size="sm"
               variant="secondary"
-              onClick={() => onPay(p.id)}
+              onClick={() => setChoosingId(p.id)}
               disabled={payingId === p.id}
             >
-              Pay
+              {payingId === p.id ? "Paying..." : "Pay"}
             </Button>
+          )}
+          {!p.isPaid && choosingId === p.id && payingId !== p.id && (
+            <div className="flex gap-1.5">
+              <Button
+                size="sm"
+                onClick={() => {
+                  setChoosingId(null);
+                  onPay(p.id, "cash");
+                }}
+              >
+                Cash
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  setChoosingId(null);
+                  onPay(p.id, "bank");
+                }}
+              >
+                Bank
+              </Button>
+              <button
+                className="text-ink-3 hover:text-ink px-1 text-xs"
+                onClick={() => setChoosingId(null)}
+              >
+                &times;
+              </button>
+            </div>
           )}
         </div>
       ))}

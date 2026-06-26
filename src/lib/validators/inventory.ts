@@ -67,6 +67,7 @@ export const purchaseCreateSchema = z.object({
   supplierId: z.string().uuid().optional(),
   purchasedOn: z.string().date().optional(),
   isPaid: z.boolean().default(false),
+  paidMethod: z.enum(["cash", "bank"]).optional(),
   dueDate: z.string().date().optional(),
   items: z.array(purchaseItemSchema).min(1, "Add at least one item"),
 });

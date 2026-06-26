@@ -4,6 +4,7 @@ import type { Expense, ExpenseLine, ExpenseWithLines } from "@/types/money";
 export interface InsertExpenseInput {
   spentOn: string;
   method: string;
+  account: "register" | "bank";
   note?: string;
   totalFils: number;
   createdBy: string;
@@ -19,6 +20,7 @@ export async function insertExpense(
     .insert({
       spent_on: input.spentOn,
       method: input.method,
+      account: input.account,
       note: input.note ?? null,
       total_fils: input.totalFils,
       created_by: input.createdBy,
@@ -108,6 +110,7 @@ function toExpense(row: any): Expense {
     id: row.id,
     spentOn: row.spent_on,
     method: row.method,
+    account: row.account ?? "register",
     note: row.note,
     receiptPath: row.receipt_path,
     totalFils: Number(row.total_fils),

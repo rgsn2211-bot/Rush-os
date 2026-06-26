@@ -36,6 +36,7 @@ export function PurchaseForm({ inventoryItems, suppliers }: PurchaseFormProps) {
   const [supplierId, setSupplierId] = useState("");
   const [purchasedOn, setPurchasedOn] = useState(today);
   const [isPaid, setIsPaid] = useState(true);
+  const [paidMethod, setPaidMethod] = useState<"cash" | "bank">("cash");
   const [dueDate, setDueDate] = useState("");
   const [lines, setLines] = useState<PurchaseLine[]>([]);
   const [showItemPicker, setShowItemPicker] = useState(false);
@@ -87,6 +88,7 @@ export function PurchaseForm({ inventoryItems, suppliers }: PurchaseFormProps) {
       supplierId: supplierId || undefined,
       purchasedOn: purchasedOn || undefined,
       isPaid,
+      paidMethod: isPaid ? paidMethod : undefined,
       dueDate: !isPaid && dueDate ? dueDate : undefined,
       items: lines.map((l) => ({
         inventoryItemId: l.inventoryItemId,
@@ -169,6 +171,28 @@ export function PurchaseForm({ inventoryItems, suppliers }: PurchaseFormProps) {
                   />
                 </button>
               </div>
+
+              {isPaid && (
+                <div className="mt-3">
+                  <Label>Paid from</Label>
+                  <div className="flex gap-2">
+                    {(["cash", "bank"] as const).map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setPaidMethod(m)}
+                        className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${
+                          paidMethod === m
+                            ? "border-navy bg-navy/5 text-navy"
+                            : "border-line text-ink-3 hover:text-ink"
+                        }`}
+                      >
+                        {m === "cash" ? "Cash (Register)" : "Bank"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {!isPaid && (
                 <div className="mt-3">
