@@ -94,6 +94,7 @@ export async function recordPurchase(
     baseQty: d.baseQty,
     unitCostFils: d.line.unitCostFils,
     lineTotalFils: d.lineTotalFils,
+    expiryDate: d.line.expiryDate ?? null,
   }));
 
   const items = await insertPurchaseItems(db, purchaseItemInputs);
@@ -252,6 +253,9 @@ export async function recordWorkerPurchase(
     if (!item) {
       throw new Error(`Inventory item ${line.inventoryItemId} not found`);
     }
+    if (item.expiry === "required" && !line.expiryDate) {
+      throw new Error(`${item.name} needs an expiry date.`);
+    }
     const baseQty = purchaseToBaseQty(
       line.purchaseQty,
       item.unitsPerPurchase,
@@ -280,6 +284,7 @@ export async function recordWorkerPurchase(
     baseQty: d.baseQty,
     unitCostFils: d.line.unitCostFils,
     lineTotalFils: d.lineTotalFils,
+    expiryDate: d.line.expiryDate ?? null,
   }));
 
   const items = await insertPurchaseItems(db, purchaseItemInputs);

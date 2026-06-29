@@ -189,6 +189,12 @@ export function PurchaseReviewDetail({
                       {pi.purchaseQty} {inv?.purchaseUnit ?? ""} → {pi.baseQty}{" "}
                       {inv?.baseUnit ?? ""}
                     </div>
+                    {pi.expiryDate && (
+                      <div className="text-ink-2 mt-1 text-xs">
+                        Expires{" "}
+                        <span className="font-semibold">{pi.expiryDate}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">

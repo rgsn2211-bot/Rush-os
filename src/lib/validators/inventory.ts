@@ -61,6 +61,7 @@ export const purchaseItemSchema = z.object({
   inventoryItemId: z.string().uuid(),
   purchaseQty: positive, // in purchase units
   unitCostFils: fils, // per purchase unit
+  expiryDate: z.string().date().optional(),
 });
 
 export const purchaseCreateSchema = z.object({
@@ -77,6 +78,7 @@ export const workerPurchaseItemSchema = z.object({
   inventoryItemId: z.string().uuid(),
   purchaseQty: positive,
   unitCostFils: fils.default(0),
+  expiryDate: z.string().date().optional(),
 });
 
 export const workerPurchaseCreateSchema = z.object({

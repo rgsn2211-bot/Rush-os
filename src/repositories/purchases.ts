@@ -23,6 +23,7 @@ export interface InsertPurchaseItemInput {
   baseQty: number;
   unitCostFils: number;
   lineTotalFils: number;
+  expiryDate?: string | null;
 }
 
 export async function listPurchases(
@@ -93,6 +94,50 @@ export async function getPurchaseItems(
   return data.map(toPurchaseItem);
 }
 
+export interface ExpiringStockRow {
+  purchaseItemId: string;
+  inventoryItemId: string;
+  name: string;
+  baseUnit: string;
+  stockBaseQty: number;
+  expiryDate: string;
+}
+
+/**
+ * Received lots from APPROVED purchases whose expiry_date falls in [from, to],
+ * limited to items that still have stock on hand. Used to build expiry alerts.
+ * (Stock is pooled by weighted-average cost, so this flags items to check, not
+ * an exact remaining-lot quantity.)
+ */
+export async function listExpiringStock(
+  db: SupabaseClient,
+  fromDate: string,
+  toDate: string,
+): Promise<ExpiringStockRow[]> {
+  const { data, error } = await db
+    .from("purchase_items")
+    .select(
+      "id, inventory_item_id, expiry_date, purchases!inner(status), inventory_items!inner(name, base_unit, stock_base_qty)",
+    )
+    .not("expiry_date", "is", null)
+    .gte("expiry_date", fromDate)
+    .lte("expiry_date", toDate)
+    .eq("purchases.status", "approved")
+    .gt("inventory_items.stock_base_qty", 0)
+    .order("expiry_date", { ascending: true });
+
+  if (error) throw error;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data ?? []).map((row: any) => ({
+    purchaseItemId: row.id,
+    inventoryItemId: row.inventory_item_id,
+    name: row.inventory_items?.name ?? "Item",
+    baseUnit: row.inventory_items?.base_unit ?? "",
+    stockBaseQty: Number(row.inventory_items?.stock_base_qty ?? 0),
+    expiryDate: row.expiry_date,
+  }));
+}
+
 export async function insertPurchase(
   db: SupabaseClient,
   input: InsertPurchaseInput,
@@ -126,6 +171,7 @@ export async function insertPurchaseItems(
     base_qty: item.baseQty,
     unit_cost_fils: item.unitCostFils,
     line_total_fils: item.lineTotalFils,
+    expiry_date: item.expiryDate ?? null,
   }));
 
   const { data, error } = await db
@@ -254,6 +300,7 @@ function toPurchaseItem(row: any): PurchaseItem {
     baseQty: Number(row.base_qty),
     unitCostFils: Number(row.unit_cost_fils),
     lineTotalFils: Number(row.line_total_fils),
+    expiryDate: row.expiry_date ?? null,
     createdAt: row.created_at,
   };
 }
