@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireWorker } from "@/lib/auth";
 import { listInventoryItemsOps } from "@/repositories/worker-inventory";
+import { getExpiryAlerts } from "@/services/alerts";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -10,7 +12,11 @@ export default async function WorkerAlertsPage() {
   const db = await createClient();
   await requireWorker(db);
 
-  const items = await listInventoryItemsOps(db);
+  const admin = createAdminClient();
+  const [items, expiry] = await Promise.all([
+    listInventoryItemsOps(db),
+    getExpiryAlerts(admin),
+  ]);
   const lowStock = items.filter(
     (i) => i.minBaseQty > 0 && i.stockBaseQty <= i.minBaseQty,
   );
@@ -26,9 +32,34 @@ export default async function WorkerAlertsPage() {
         </Link>
         <h1 className="text-ink text-xl font-bold">Inventory Alerts</h1>
         <p className="text-ink-3 mt-1 text-[14px]">
-          Low and expiring items
+          Low, expiring and expired items
         </p>
       </div>
+
+      <h2 className="text-ink mb-3 text-base font-bold">
+        Expiring &amp; expired{" "}
+        <span className="text-ink-3 text-sm font-normal">({expiry.length})</span>
+      </h2>
+
+      {expiry.length === 0 ? (
+        <EmptyState message="Nothing is expiring soon." />
+      ) : (
+        <div className="mb-7 flex flex-col gap-3">
+          {expiry.map((a) => (
+            <Card key={a.id}>
+              <div className="flex items-center justify-between px-5 py-4">
+                <div>
+                  <div className="text-[15px] font-semibold">{a.title}</div>
+                  <div className="text-ink-2 mt-1 text-sm">{a.detail}</div>
+                </div>
+                <Badge variant={a.type === "expired" ? "red" : "amber"}>
+                  {a.type === "expired" ? "Expired" : "Expiring"}
+                </Badge>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
 
       <h2 className="text-ink mb-3 text-base font-bold">
         Low stock{" "}

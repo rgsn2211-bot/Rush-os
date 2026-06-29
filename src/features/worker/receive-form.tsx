@@ -21,6 +21,16 @@ interface ReceiveLine {
   basePerStock: number;
   purchaseQty: number;
   unitCostBhd: string;
+  expiry: "required" | "optional" | "not_needed";
+  expiryDate: string;
+}
+
+/** Suggested expiry = today + shelf-life days, as a yyyy-mm-dd string. */
+function suggestExpiry(shelfLifeDays: number | null): string {
+  if (!shelfLifeDays || shelfLifeDays <= 0) return "";
+  const d = new Date();
+  d.setDate(d.getDate() + shelfLifeDays);
+  return d.toISOString().split("T")[0];
 }
 
 interface ReceiveFormProps {
@@ -54,6 +64,11 @@ export function ReceiveForm({ inventoryItems, suppliers }: ReceiveFormProps) {
         basePerStock: item.basePerStock,
         purchaseQty: 1,
         unitCostBhd: "",
+        expiry: item.expiry,
+        expiryDate:
+          item.expiry === "not_needed"
+            ? ""
+            : suggestExpiry(item.shelfLifeDays),
       },
     ]);
     setShowPicker(false);
@@ -81,6 +96,14 @@ export function ReceiveForm({ inventoryItems, suppliers }: ReceiveFormProps) {
       return;
     }
 
+    const missingExpiry = lines.find(
+      (l) => l.expiry === "required" && !l.expiryDate,
+    );
+    if (missingExpiry) {
+      setError(`Enter an expiry date for ${missingExpiry.name}.`);
+      return;
+    }
+
     setLoading(true);
 
     const body = {
@@ -92,6 +115,7 @@ export function ReceiveForm({ inventoryItems, suppliers }: ReceiveFormProps) {
         inventoryItemId: l.inventoryItemId,
         purchaseQty: l.purchaseQty,
         unitCostFils: isCash ? bhdToFils(Number(l.unitCostBhd) || 0) : 0,
+        expiryDate: l.expiryDate || undefined,
       })),
     };
 
@@ -263,6 +287,27 @@ export function ReceiveForm({ inventoryItems, suppliers }: ReceiveFormProps) {
                     value={l.unitCostBhd}
                     placeholder="0.000"
                     onChange={(e) => updateLine(i, { unitCostBhd: e.target.value })}
+                    className="font-mono"
+                  />
+                </div>
+              )}
+
+              {l.expiry !== "not_needed" && (
+                <div className="mt-3">
+                  <Label>
+                    Expiry date
+                    {l.expiry === "required" ? (
+                      <span className="text-rush-red"> *</span>
+                    ) : (
+                      <span className="text-ink-3"> (optional)</span>
+                    )}
+                  </Label>
+                  <Input
+                    type="date"
+                    value={l.expiryDate}
+                    onChange={(e) =>
+                      updateLine(i, { expiryDate: e.target.value })
+                    }
                     className="font-mono"
                   />
                 </div>

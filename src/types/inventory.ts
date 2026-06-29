@@ -93,6 +93,8 @@ export interface PurchaseItem {
   baseQty: number;
   unitCostFils: number;
   lineTotalFils: number;
+  /** Expiry date of this received lot (items with expiry tracking). */
+  expiryDate: string | null;
   createdAt: string;
 }
 

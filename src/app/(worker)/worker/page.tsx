@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireWorker } from "@/lib/auth";
 import { listInventoryItemsOps } from "@/repositories/worker-inventory";
-import { countLowStock } from "@/services/alerts";
+import { countLowStock, getExpiryAlerts } from "@/services/alerts";
 import { getRegisterCashBalance } from "@/services/daily-closing";
 import { formatFils } from "@/lib/calculations/currency";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
@@ -30,11 +30,12 @@ export default async function WorkerHome() {
   const db = await createClient();
   const authUser = await requireWorker(db);
   const admin = createAdminClient();
-  const [items, registerCashFils] = await Promise.all([
+  const [items, registerCashFils, expiryAlerts] = await Promise.all([
     listInventoryItemsOps(db),
     getRegisterCashBalance(admin),
+    getExpiryAlerts(admin),
   ]);
-  const lowCount = countLowStock(items);
+  const alertCount = countLowStock(items) + expiryAlerts.length;
 
   const actions = [
     {
@@ -42,7 +43,7 @@ export default async function WorkerHome() {
       desc: "Low, expiring & expired items",
       icon: Bell,
       href: "/worker/alerts",
-      badge: lowCount > 0 ? lowCount : undefined,
+      badge: alertCount > 0 ? alertCount : undefined,
     },
     {
       label: "Record Supplier Purchase",
