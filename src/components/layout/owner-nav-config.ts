@@ -10,6 +10,7 @@ import {
   Gift,
   Trash2,
   PackageX,
+  ClipboardList,
   CalendarCheck,
   Sparkles,
   Users,
@@ -131,6 +132,13 @@ export const ownerNav: OwnerNavItem[] = [
     label: "Waste",
     href: "/owner/waste",
     icon: PackageX,
+  },
+  {
+    type: "link",
+    id: "count",
+    label: "Inventory Count",
+    href: "/owner/inventory-count",
+    icon: ClipboardList,
   },
   {
     type: "link",

@@ -158,3 +158,57 @@ export interface WasteLogWithDetails extends WasteLog {
   basePerStock: number;
   submitterName: string | null;
 }
+
+/**
+ * A physical stock-count session. A worker counts the shelf and submits one
+ * session (header) with many lines (one per item counted). The owner reviews
+ * the variances and, on approval, reconciles each item's stock.
+ */
+export interface InventoryCount {
+  id: string;
+  notes: string | null;
+  countedAt: string;
+  status: ReviewStatus;
+  createdBy: string | null;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** One counted item within a session. All quantities are in base units. */
+export interface InventoryCountItem {
+  id: string;
+  countId: string;
+  inventoryItemId: string;
+  /** System on-hand snapshotted when the worker submitted, in base units. */
+  expectedBaseQty: number;
+  /** What was physically counted, in base units. */
+  countedBaseQty: number;
+  /** countedBaseQty - expectedBaseQty (signed), in base units. */
+  varianceBaseQty: number;
+  /** Value change in fils (signed). Set on approval; 0 until then. */
+  valueFils: number;
+  createdAt: string;
+}
+
+/** A count line enriched with item details, for the owner variance table. */
+export interface InventoryCountItemWithDetails extends InventoryCountItem {
+  itemName: string | null;
+  stockUnit: string | null;
+  basePerStock: number;
+}
+
+/** A session plus its enriched lines and submitter, for the detail view. */
+export interface InventoryCountWithItems extends InventoryCount {
+  items: InventoryCountItemWithDetails[];
+  submitterName: string | null;
+}
+
+/** A session summary for the owner list (counts + net value, no line detail). */
+export interface InventoryCountSummary extends InventoryCount {
+  submitterName: string | null;
+  itemCount: number;
+  /** Net value change across all lines in fils (signed). 0 until approved. */
+  netValueFils: number;
+}

@@ -5,6 +5,7 @@ import Link from "next/link";
 import type {
   PurchaseWithSubmitter,
   WasteLogWithDetails,
+  InventoryCountSummary,
 } from "@/types/inventory";
 import type { ComplimentaryLogWithSubmitter } from "@/types/pos";
 import type { DailyClosingWithSubmitter } from "@/types/closing";
@@ -27,6 +28,7 @@ interface ReviewListProps {
   wasteLogs?: WasteLogWithDetails[];
   closings?: DailyClosingWithSubmitter[];
   cashOuts?: RegisterCashOutWithSubmitter[];
+  inventoryCounts?: InventoryCountSummary[];
 }
 
 type Filter =
@@ -36,7 +38,8 @@ type Filter =
   | "complimentary"
   | "waste"
   | "closing"
-  | "cashout";
+  | "cashout"
+  | "count";
 
 export function ReviewList({
   purchases,
@@ -44,6 +47,7 @@ export function ReviewList({
   wasteLogs = [],
   closings = [],
   cashOuts = [],
+  inventoryCounts = [],
 }: ReviewListProps) {
   const [filter, setFilter] = useState<Filter>("all");
 
@@ -53,6 +57,7 @@ export function ReviewList({
   const wasteCount = wasteLogs.length;
   const closingCount = closings.length;
   const cashOutCount = cashOuts.length;
+  const countCount = inventoryCounts.length;
 
   const filteredPurchases = purchases.filter((p) => {
     if (filter === "cash") return p.isPaid;
@@ -61,7 +66,8 @@ export function ReviewList({
       filter === "complimentary" ||
       filter === "waste" ||
       filter === "closing" ||
-      filter === "cashout"
+      filter === "cashout" ||
+      filter === "count"
     )
       return false;
     return true;
@@ -79,12 +85,16 @@ export function ReviewList({
   const filteredCashOuts =
     filter === "cashout" || filter === "all" ? cashOuts : [];
 
+  const filteredCounts =
+    filter === "count" || filter === "all" ? inventoryCounts : [];
+
   const totalCount =
     filteredPurchases.length +
     filteredComp.length +
     filteredWaste.length +
     filteredClosings.length +
-    filteredCashOuts.length;
+    filteredCashOuts.length +
+    filteredCounts.length;
 
   const categories: { key: Filter; label: string; count: number }[] = [
     {
@@ -95,7 +105,8 @@ export function ReviewList({
         compCount +
         wasteCount +
         closingCount +
-        cashOutCount,
+        cashOutCount +
+        countCount,
     },
     { key: "purchases", label: "Supplier Deliveries", count: supplierCount },
     { key: "cash", label: "Cash Purchases", count: cashCount },
@@ -103,11 +114,12 @@ export function ReviewList({
     { key: "waste", label: "Waste", count: wasteCount },
     { key: "closing", label: "Daily Closing", count: closingCount },
     { key: "cashout", label: "Register Cash Out", count: cashOutCount },
+    { key: "count", label: "Inventory Count", count: countCount },
   ];
 
   return (
     <div>
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
         {categories.map((c) => (
           <button
             key={c.key}
@@ -287,6 +299,39 @@ export function ReviewList({
                   {c.submitterName ?? "Unknown"} ·{" "}
                   {new Date(c.createdAt).toLocaleDateString()} ·{" "}
                   {formatFils(c.amountFils)} BHD · {c.reason}
+                </div>
+              </div>
+              <span className="text-ink-3 text-sm">›</span>
+            </Link>
+          ))}
+          {filteredCounts.map((c, i) => (
+            <Link
+              key={c.id}
+              href={`/owner/inventory-count/${c.id}`}
+              className={`hover:bg-bg flex items-center gap-4 px-5 py-4 ${
+                filteredPurchases.length > 0 ||
+                filteredComp.length > 0 ||
+                filteredWaste.length > 0 ||
+                filteredClosings.length > 0 ||
+                filteredCashOuts.length > 0 ||
+                i > 0
+                  ? "border-line-2 border-t"
+                  : ""
+              }`}
+            >
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50">
+                <ClipboardList size={20} className="text-blue-500" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[15px] font-bold">
+                    Inventory count · {new Date(c.countedAt).toLocaleDateString()}
+                  </span>
+                  <Badge variant="amber">Needs review</Badge>
+                </div>
+                <div className="text-ink-2 mt-0.5 text-[13px]">
+                  {c.submitterName ?? "Unknown"} · {c.itemCount} item
+                  {c.itemCount !== 1 ? "s" : ""} counted
                 </div>
               </div>
               <span className="text-ink-3 text-sm">›</span>

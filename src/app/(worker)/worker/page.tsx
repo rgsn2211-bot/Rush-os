@@ -71,7 +71,7 @@ export default async function WorkerHome() {
       label: "Inventory Count",
       desc: "Monthly full stock count",
       icon: ClipboardList,
-      href: null,
+      href: "/worker/inventory-count",
     },
   ];
 

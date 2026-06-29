@@ -115,6 +115,35 @@ export function consumeStock(
   };
 }
 
+/**
+ * Reconcile stock to a physically counted quantity (inventory count approval).
+ *
+ * The physical count is the source of truth, so on-hand is SET to the counted
+ * quantity (not adjusted by a delta) and revalued at the current weighted-average
+ * unit cost. When there is no stock to derive a cost from (baseQty === 0), the
+ * item's default cost is used instead.
+ *
+ * Returns the new stock state and the value change: positive for an overage
+ * (stock gained value), negative for a shortage (shrinkage loss). Counting to
+ * zero writes off all remaining value exactly.
+ */
+export function reconcileCount(
+  current: StockState,
+  countedBaseQty: number,
+  defaultCostFils: number,
+): { state: StockState; varianceFils: number } {
+  if (countedBaseQty < 0) {
+    throw new Error("countedBaseQty cannot be negative");
+  }
+  const unitCostFils =
+    current.baseQty > 0 ? averageUnitCostFils(current) : defaultCostFils;
+  const newValueFils = Math.round(unitCostFils * countedBaseQty);
+  return {
+    state: { baseQty: countedBaseQty, valueFils: newValueFils },
+    varianceFils: newValueFils - current.valueFils,
+  };
+}
+
 export type CostingMethod = "weighted_average" | "fixed";
 
 /**

@@ -4,6 +4,7 @@ import {
   receiveStock,
   averageUnitCostFils,
   consumeStock,
+  reconcileCount,
   recipeCostFils,
   grossMargin,
   type StockState,
@@ -73,6 +74,54 @@ describe("weighted-average cost", () => {
   it("rejects consuming more than on hand", () => {
     const s = receiveStock(empty, 5, 5000);
     expect(() => consumeStock(s, 6)).toThrow();
+  });
+});
+
+describe("inventory count reconciliation", () => {
+  const empty: StockState = { baseQty: 0, valueFils: 0 };
+
+  it("a shortage sets stock down and reports a negative variance (loss)", () => {
+    // 20 L on hand worth 12.000 BHD (avg 600 fils/L); counted only 15 L.
+    const current = receiveStock(empty, 20, 12000);
+    const { state, varianceFils } = reconcileCount(current, 15, 0);
+    expect(state.baseQty).toBe(15);
+    expect(state.valueFils).toBe(9000); // 15 x 600
+    expect(varianceFils).toBe(-3000); // lost 5 L x 600
+  });
+
+  it("an overage sets stock up and reports a positive variance (gain)", () => {
+    const current = receiveStock(empty, 20, 12000); // avg 600 fils/L
+    const { state, varianceFils } = reconcileCount(current, 25, 0);
+    expect(state.baseQty).toBe(25);
+    expect(state.valueFils).toBe(15000); // 25 x 600
+    expect(varianceFils).toBe(3000); // gained 5 L x 600
+  });
+
+  it("matching the count leaves value unchanged (zero variance)", () => {
+    const current = receiveStock(empty, 20, 12000);
+    const { state, varianceFils } = reconcileCount(current, 20, 0);
+    expect(state).toEqual(current);
+    expect(varianceFils).toBe(0);
+  });
+
+  it("counting to zero writes off all remaining value", () => {
+    const current = receiveStock(empty, 3, 1000); // odd per-unit cost
+    const { state, varianceFils } = reconcileCount(current, 0, 0);
+    expect(state.baseQty).toBe(0);
+    expect(state.valueFils).toBe(0);
+    expect(varianceFils).toBe(-1000);
+  });
+
+  it("falls back to the default cost when there is no prior stock", () => {
+    // Nothing on hand, but a count finds 10 units; value them at default cost.
+    const { state, varianceFils } = reconcileCount(empty, 10, 250);
+    expect(state.baseQty).toBe(10);
+    expect(state.valueFils).toBe(2500); // 10 x 250
+    expect(varianceFils).toBe(2500);
+  });
+
+  it("rejects a negative counted quantity", () => {
+    expect(() => reconcileCount(empty, -1, 0)).toThrow();
   });
 });
 
