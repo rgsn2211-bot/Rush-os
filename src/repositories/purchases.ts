@@ -38,6 +38,32 @@ export async function listPurchases(
   return data.map(toPurchase);
 }
 
+/**
+ * Purchases on a given date that take cash out of the register: either an
+ * approved purchase paid by cash, or a worker cash purchase still awaiting
+ * review (isPaid set, destined for the register on approval). Bank-paid and
+ * unpaid supplier deliveries do NOT affect the drawer and are excluded.
+ */
+export async function listCashPurchasesForDate(
+  db: SupabaseClient,
+  date: string,
+): Promise<Purchase[]> {
+  const { data, error } = await db
+    .from("purchases")
+    .select("*")
+    .eq("purchased_on", date)
+    .neq("status", "voided");
+
+  if (error) throw error;
+  return data
+    .map(toPurchase)
+    .filter(
+      (p) =>
+        (p.status === "approved" && p.paidMethod === "cash") ||
+        (p.status === "needs_review" && p.isPaid),
+    );
+}
+
 export async function getPurchase(
   db: SupabaseClient,
   id: string,

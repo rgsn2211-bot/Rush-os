@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   DailyClosing,
   DailyClosingWithSubmitter,
+  ClosingReviewDetails,
 } from "@/types/closing";
 import type { DailyClosingCreateInput } from "@/lib/validators/closing";
 import { bhdToFils } from "@/lib/calculations/currency";
@@ -14,22 +15,79 @@ import {
   getDailyClosingByDate,
   getDailyClosing,
   updateDailyClosingStatus,
+  updateDailyClosingReconciliation,
   deleteDailyClosing,
 } from "@/repositories/daily-closing";
-import { insertCashMovement } from "@/repositories/cash-movements";
+import {
+  insertCashMovement,
+  getRegisterBalance,
+  getRegisterBalanceBefore,
+} from "@/repositories/cash-movements";
 import { insertSettlement } from "@/repositories/settlements";
+import { listRegisterCashOutsForDate } from "@/repositories/register-cash-outs";
+import { listCashPurchasesForDate } from "@/repositories/purchases";
+import { listWasteLogsForDate } from "@/repositories/waste";
+import { listComplimentaryLogsForDate } from "@/repositories/complimentary";
 import { getPlatforms, platformFeeFils } from "@/services/delivery";
+
+/** Current net register cash (in − out across all dates), in fils. */
+export async function getRegisterCashBalance(
+  db: SupabaseClient,
+): Promise<number> {
+  return getRegisterBalance(db);
+}
+
+/**
+ * Cash that left the register on a given date (in fils): worker/owner register
+ * cash-outs (purchases + withdrawals) plus cash-paid inventory purchases. Read
+ * from their own source tables so it's stable regardless of owner-approval
+ * order — the cash physically left the drawer when the worker recorded it.
+ */
+export async function getCashOutForDate(
+  db: SupabaseClient,
+  date: string,
+): Promise<number> {
+  const [cashOuts, cashPurchases] = await Promise.all([
+    listRegisterCashOutsForDate(db, date),
+    listCashPurchasesForDate(db, date),
+  ]);
+  const cashOutsFils = cashOuts.reduce((s, c) => s + c.amountFils, 0);
+  const purchasesFils = cashPurchases.reduce((s, p) => s + p.totalFils, 0);
+  return cashOutsFils + purchasesFils;
+}
+
+/**
+ * Expected cash in the drawer at end of day:
+ *   opening register cash (carried over from before today)
+ *   + today's cash sales
+ *   − cash that left the register today (purchases + withdrawals).
+ * `db` must be able to read cash_movements / purchases (owner client, or the
+ * service-role client when called from a worker-triggered route).
+ */
+export async function computeExpectedCashFils(
+  db: SupabaseClient,
+  reportDate: string,
+  cashSalesFils: number,
+): Promise<number> {
+  const [openingFils, cashOutFils] = await Promise.all([
+    getRegisterBalanceBefore(db, reportDate),
+    getCashOutForDate(db, reportDate),
+  ]);
+  return openingFils + cashSalesFils - cashOutFils;
+}
 
 /**
  * Worker submits the end-of-day closing. Money arrives in BHD and is converted
- * to fils here. Gross sales is the sum of the payment channels; expected cash is
- * the cash-sales figure (cash-out integration comes later), and the variance is
- * counted minus expected. Created as needs_review; one closing per day.
+ * to fils here. Gross sales is the sum of the payment channels. The expected
+ * drawer cash is computed by the caller (it needs to read the cash log, which
+ * workers can't) and passed in; the variance is counted minus expected. Created
+ * as needs_review; one closing per day.
  */
 export async function submitDailyClosing(
   db: SupabaseClient,
   input: DailyClosingCreateInput,
   createdBy: string,
+  cashExpectedFils: number,
 ): Promise<DailyClosing> {
   const existing = await getDailyClosingByDate(db, input.reportDate);
   if (existing) {
@@ -60,7 +118,6 @@ export async function submitDailyClosing(
     deliveryOrders;
 
   const cashCountedFils = bhdToFils(input.cashCountedBhd);
-  const cashExpectedFils = cashSalesFils;
   const cashVarianceFils = cashCountedFils - cashExpectedFils;
 
   const closing = await insertDailyClosing(db, {
@@ -150,8 +207,74 @@ export async function reviewClosing(
     return;
   }
 
+  // Re-freeze the drawer reconciliation as the official record: cash-outs may
+  // have been added/approved since the worker submitted, so recompute against
+  // the current cash log (the owner client can read it).
+  const expectedFils = await computeExpectedCashFils(
+    db,
+    closing.reportDate,
+    closing.cashSalesFils,
+  );
+  await updateDailyClosingReconciliation(
+    db,
+    id,
+    expectedFils,
+    closing.cashCountedFils - expectedFils,
+  );
+
   await updateDailyClosingStatus(db, id, "approved", reviewedBy);
   await postApprovalEffects(db, closing, reviewedBy);
+}
+
+/**
+ * Everything the owner needs to review one day's closing: the drawer
+ * reconciliation plus the day's waste, complimentary items, register cash-outs,
+ * cash purchases and delivery lines. Read with an owner (or service-role) client.
+ */
+export async function getClosingReviewDetails(
+  db: SupabaseClient,
+  closingId: string,
+): Promise<ClosingReviewDetails> {
+  const closing = await getDailyClosing(db, closingId);
+  if (!closing) throw new Error("Closing not found");
+
+  const date = closing.reportDate;
+  const [
+    openingRegisterFils,
+    cashOutTodayFils,
+    deliveryLines,
+    waste,
+    complimentary,
+    cashOuts,
+    cashPurchases,
+  ] = await Promise.all([
+    getRegisterBalanceBefore(db, date),
+    getCashOutForDate(db, date),
+    getDeliveryClosingLines(db, closingId),
+    listWasteLogsForDate(db, date),
+    listComplimentaryLogsForDate(db, date),
+    listRegisterCashOutsForDate(db, date),
+    listCashPurchasesForDate(db, date),
+  ]);
+
+  const cashExpectedFils =
+    openingRegisterFils + closing.cashSalesFils - cashOutTodayFils;
+
+  return {
+    closingId,
+    reportDate: date,
+    openingRegisterFils,
+    cashSalesFils: closing.cashSalesFils,
+    cashOutTodayFils,
+    cashExpectedFils,
+    cashCountedFils: closing.cashCountedFils,
+    cashVarianceFils: closing.cashCountedFils - cashExpectedFils,
+    deliveryLines,
+    waste,
+    complimentary,
+    cashOuts,
+    cashPurchases,
+  };
 }
 
 /**

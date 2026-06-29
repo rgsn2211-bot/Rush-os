@@ -101,6 +101,43 @@ export async function listPendingComplimentaryLogs(
   }));
 }
 
+/** Non-voided complimentary logs that occurred on a given date, with names. */
+export async function listComplimentaryLogsForDate(
+  db: SupabaseClient,
+  date: string,
+): Promise<ComplimentaryLogWithSubmitter[]> {
+  const { data, error } = await db
+    .from("complimentary_logs")
+    .select("*")
+    .gte("occurred_at", `${date}T00:00:00`)
+    .lt("occurred_at", `${date}T23:59:59.999`)
+    .neq("status", "voided")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+
+  const logs = data.map(toComplimentaryLog);
+  const creatorIds = [
+    ...new Set(logs.map((l) => l.createdBy).filter(Boolean)),
+  ] as string[];
+
+  let nameMap = new Map<string, string>();
+  if (creatorIds.length > 0) {
+    const { data: profiles } = await db
+      .from("profiles")
+      .select("id, display_name")
+      .in("id", creatorIds);
+    if (profiles) {
+      nameMap = new Map(profiles.map((p) => [p.id, p.display_name]));
+    }
+  }
+
+  return logs.map((l) => ({
+    ...l,
+    submitterName: (l.createdBy && nameMap.get(l.createdBy)) ?? null,
+  }));
+}
+
 export async function listWorkerTodayLogs(
   db: SupabaseClient,
   userId: string,

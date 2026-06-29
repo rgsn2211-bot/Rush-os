@@ -2,13 +2,33 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { DailyClosingWithSubmitter } from "@/types/closing";
+import type {
+  DailyClosingWithSubmitter,
+  ClosingReviewDetails,
+} from "@/types/closing";
 import { formatFils } from "@/lib/calculations/currency";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Check, X, ClipboardList } from "lucide-react";
+import {
+  Check,
+  X,
+  ClipboardList,
+  ChevronDown,
+  ChevronUp,
+  Trash2,
+  Gift,
+  Banknote,
+} from "lucide-react";
+
+const WASTE_REASON_LABELS: Record<string, string> = {
+  spoilage: "Spoilage",
+  breakage: "Breakage",
+  expired: "Expired",
+  training: "Training",
+  other: "Other",
+};
 
 interface Props {
   closings: DailyClosingWithSubmitter[];
@@ -21,6 +41,28 @@ export function ClosingList({ closings }: Props) {
   const [filter, setFilter] = useState<Filter>("all");
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [details, setDetails] = useState<Record<string, ClosingReviewDetails>>(
+    {},
+  );
+  const [detailsLoadingId, setDetailsLoadingId] = useState<string | null>(null);
+
+  async function toggleDetails(id: string) {
+    if (expandedId === id) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(id);
+    if (!details[id]) {
+      setDetailsLoadingId(id);
+      const res = await fetch(`/api/closing/${id}/details`);
+      if (res.ok) {
+        const data: ClosingReviewDetails = await res.json();
+        setDetails((d) => ({ ...d, [id]: data }));
+      }
+      setDetailsLoadingId(null);
+    }
+  }
 
   const pending = closings.filter((c) => c.status === "needs_review");
   const reviewed = closings.filter((c) => c.status !== "needs_review");
@@ -47,6 +89,13 @@ export function ClosingList({ closings }: Props) {
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       setError(typeof data.error === "string" ? data.error : "Action failed");
+    } else {
+      // Reconciliation is re-frozen on approval — drop the cached detail.
+      setDetails((d) => {
+        const next = { ...d };
+        delete next[id];
+        return next;
+      });
     }
 
     setLoadingId(null);
@@ -141,32 +190,273 @@ export function ClosingList({ closings }: Props) {
                 </div>
               </div>
 
-              {c.status === "needs_review" && (
-                <div className="mt-3 flex gap-2 pl-14">
-                  <Button
-                    size="sm"
-                    onClick={() => handleReview(c.id, "approve")}
-                    disabled={loadingId === c.id}
-                  >
-                    <Check size={14} className="mr-1" />
-                    Approve
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => handleReview(c.id, "reject")}
-                    disabled={loadingId === c.id}
-                    className="text-rush-red"
-                  >
-                    <X size={14} className="mr-1" />
-                    Reject
-                  </Button>
+              <div className="mt-3 flex flex-wrap gap-2 pl-14">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => toggleDetails(c.id)}
+                >
+                  {expandedId === c.id ? (
+                    <ChevronUp size={14} className="mr-1" />
+                  ) : (
+                    <ChevronDown size={14} className="mr-1" />
+                  )}
+                  Details
+                </Button>
+                {c.status === "needs_review" && (
+                  <>
+                    <Button
+                      size="sm"
+                      onClick={() => handleReview(c.id, "approve")}
+                      disabled={loadingId === c.id}
+                    >
+                      <Check size={14} className="mr-1" />
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => handleReview(c.id, "reject")}
+                      disabled={loadingId === c.id}
+                      className="text-rush-red"
+                    >
+                      <X size={14} className="mr-1" />
+                      Reject
+                    </Button>
+                  </>
+                )}
+              </div>
+
+              {expandedId === c.id && (
+                <div className="mt-3 pl-14">
+                  {detailsLoadingId === c.id && !details[c.id] ? (
+                    <div className="text-ink-3 text-sm">Loading details…</div>
+                  ) : details[c.id] ? (
+                    <ClosingDetails data={details[c.id]} closing={c} />
+                  ) : (
+                    <div className="text-ink-3 text-sm">
+                      Could not load details.
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           ))}
         </Card>
       )}
+    </div>
+  );
+}
+
+function signed(fils: number): string {
+  const sign = fils < 0 ? "−" : "";
+  return `${sign}${formatFils(Math.abs(fils))}`;
+}
+
+function ClosingDetails({
+  data,
+  closing,
+}: {
+  data: ClosingReviewDetails;
+  closing: DailyClosingWithSubmitter;
+}) {
+  const methods: { label: string; sales: number; orders: number }[] = [
+    { label: "Cash", sales: closing.cashSalesFils, orders: closing.cashOrders },
+    { label: "Card", sales: closing.cardSalesFils, orders: closing.cardOrders },
+    {
+      label: "BenefitPay",
+      sales: closing.benefitpaySalesFils,
+      orders: closing.benefitpayOrders,
+    },
+  ];
+
+  return (
+    <div className="border-line bg-bg flex flex-col gap-4 rounded-xl border p-4 text-sm">
+      {/* Payment breakdown */}
+      <Section title="Sales by payment method">
+        {methods.map((m) => (
+          <Row key={m.label} label={`${m.label} · ${m.orders} orders`}>
+            {formatFils(m.sales)} BHD
+          </Row>
+        ))}
+        {data.deliveryLines.map((d) => (
+          <Row
+            key={d.platformId}
+            label={`${d.platformName ?? "Delivery"} · ${d.orders} orders`}
+          >
+            {formatFils(d.salesFils)} BHD
+          </Row>
+        ))}
+        {closing.discountFils > 0 && (
+          <Row label="Discounts">{formatFils(closing.discountFils)} BHD</Row>
+        )}
+      </Section>
+
+      {/* Cash drawer reconciliation */}
+      <Section title="Cash drawer">
+        <Row label="Register cash carried over">
+          {formatFils(data.openingRegisterFils)} BHD
+        </Row>
+        <Row label="+ Cash sales today">
+          {formatFils(data.cashSalesFils)} BHD
+        </Row>
+        <Row label="− Cash out today (purchases + withdrawals)">
+          −{formatFils(data.cashOutTodayFils)} BHD
+        </Row>
+        <Row label="Expected in drawer" strong>
+          {formatFils(data.cashExpectedFils)} BHD
+        </Row>
+        <Row label="Counted">{formatFils(data.cashCountedFils)} BHD</Row>
+        <Row
+          label="Difference"
+          valueClass={
+            data.cashVarianceFils === 0 ? "text-green-600" : "text-rush-red"
+          }
+          strong
+        >
+          {signed(data.cashVarianceFils)} BHD
+        </Row>
+      </Section>
+
+      {/* Cash that left the register */}
+      {(data.cashOuts.length > 0 || data.cashPurchases.length > 0) && (
+        <Section title="Cash out of register today">
+          {data.cashPurchases.map((p) => (
+            <Row
+              key={p.id}
+              label={
+                <span className="flex items-center gap-1.5">
+                  <Banknote size={13} className="text-ink-3" />
+                  Cash purchase
+                  {p.status === "needs_review" && (
+                    <Badge variant="amber">Pending</Badge>
+                  )}
+                </span>
+              }
+            >
+              −{formatFils(p.totalFils)} BHD
+            </Row>
+          ))}
+          {data.cashOuts.map((c) => (
+            <Row
+              key={c.id}
+              label={
+                <span className="flex items-center gap-1.5">
+                  <Banknote size={13} className="text-ink-3" />
+                  {c.kind === "purchase" ? "Purchase" : "Withdrawal"}: {c.reason}
+                  {c.status === "needs_review" && (
+                    <Badge variant="amber">Pending</Badge>
+                  )}
+                </span>
+              }
+            >
+              −{formatFils(c.amountFils)} BHD
+            </Row>
+          ))}
+        </Section>
+      )}
+
+      {/* Waste */}
+      <Section title={`Waste (${data.waste.length})`}>
+        {data.waste.length === 0 ? (
+          <div className="text-ink-3">No waste logged today.</div>
+        ) : (
+          data.waste.map((w) => (
+            <Row
+              key={w.id}
+              label={
+                <span className="flex items-center gap-1.5">
+                  <Trash2 size={13} className="text-rush-red" />
+                  {w.itemName ?? "Item"} ·{" "}
+                  {w.baseQty / (w.basePerStock || 1)} {w.stockUnit ?? ""} ·{" "}
+                  {WASTE_REASON_LABELS[w.reason] ?? w.reason}
+                  {w.status === "needs_review" && (
+                    <Badge variant="amber">Pending</Badge>
+                  )}
+                </span>
+              }
+            >
+              {w.status === "approved" ? `${formatFils(w.valueFils)} BHD` : ""}
+            </Row>
+          ))
+        )}
+      </Section>
+
+      {/* Complimentary */}
+      <Section title={`Complimentary (${data.complimentary.length})`}>
+        {data.complimentary.length === 0 ? (
+          <div className="text-ink-3">No complimentary items today.</div>
+        ) : (
+          data.complimentary.map((comp) => (
+            <Row
+              key={comp.id}
+              label={
+                <span className="flex items-center gap-1.5">
+                  <Gift size={13} className="text-navy" />
+                  {comp.description} · {comp.reason}
+                  {comp.status === "needs_review" && (
+                    <Badge variant="amber">Pending</Badge>
+                  )}
+                </span>
+              }
+            >
+              {formatFils(comp.amountFils)} BHD
+            </Row>
+          ))
+        )}
+        {data.complimentary.length > 0 && (
+          <p className="text-ink-3 mt-1 text-xs">
+            Complimentary items don&apos;t deduct inventory here — they&apos;re
+            already in the POS Sales by Item upload.
+          </p>
+        )}
+      </Section>
+    </div>
+  );
+}
+
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="text-ink-3 mb-1.5 text-xs font-bold tracking-wider uppercase">
+        {title}
+      </div>
+      <div className="flex flex-col gap-1">{children}</div>
+    </div>
+  );
+}
+
+function Row({
+  label,
+  children,
+  strong,
+  valueClass,
+}: {
+  label: React.ReactNode;
+  children?: React.ReactNode;
+  strong?: boolean;
+  valueClass?: string;
+}) {
+  return (
+    <div
+      className={`flex items-center justify-between gap-3 ${
+        strong ? "border-line-2 border-t pt-1.5 font-semibold" : ""
+      }`}
+    >
+      <span className="text-ink-2">{label}</span>
+      <span
+        className={`shrink-0 font-mono ${valueClass ?? "text-ink"} ${
+          strong ? "font-bold" : ""
+        }`}
+      >
+        {children}
+      </span>
     </div>
   );
 }

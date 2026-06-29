@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireWorker } from "@/lib/auth";
 import { listInventoryItemsOps } from "@/repositories/worker-inventory";
 import { countLowStock } from "@/services/alerts";
+import { getRegisterCashBalance } from "@/services/daily-closing";
+import { formatFils } from "@/lib/calculations/currency";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +29,11 @@ function greeting(): string {
 export default async function WorkerHome() {
   const db = await createClient();
   const authUser = await requireWorker(db);
-  const items = await listInventoryItemsOps(db);
+  const admin = createAdminClient();
+  const [items, registerCashFils] = await Promise.all([
+    listInventoryItemsOps(db),
+    getRegisterCashBalance(admin),
+  ]);
   const lowCount = countLowStock(items);
 
   const actions = [
@@ -85,6 +92,27 @@ export default async function WorkerHome() {
           {authUser.displayName || "Worker Tablet"}
         </p>
       </div>
+
+      <Card className="mb-[18px]">
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="bg-bg flex h-[50px] w-[50px] items-center justify-center rounded-[13px]">
+                <Banknote size={26} className="text-navy" strokeWidth={1.9} />
+              </div>
+              <div>
+                <div className="text-ink-3 text-[13px] font-semibold">
+                  Cash in register
+                </div>
+                <div className="text-ink font-mono text-2xl font-bold">
+                  {formatFils(registerCashFils)}{" "}
+                  <span className="text-ink-3 text-sm font-semibold">BHD</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="mb-[18px]">
         <CardHeader>

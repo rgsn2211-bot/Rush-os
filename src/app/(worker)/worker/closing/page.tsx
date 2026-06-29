@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireWorker } from "@/lib/auth";
-import { getClosingForDate } from "@/services/daily-closing";
+import {
+  getClosingForDate,
+  getRegisterCashBalance,
+} from "@/services/daily-closing";
 import { getPlatformsForWorker } from "@/services/delivery";
 import { ClosingWizard } from "@/features/worker/closing-wizard";
 
@@ -10,9 +14,11 @@ export default async function WorkerClosingPage() {
   await requireWorker(db);
 
   const today = new Date().toISOString().split("T")[0];
-  const [existing, platforms] = await Promise.all([
+  const admin = createAdminClient();
+  const [existing, platforms, registerCashFils] = await Promise.all([
     getClosingForDate(db, today),
     getPlatformsForWorker(db),
+    getRegisterCashBalance(admin),
   ]);
 
   return (
@@ -33,6 +39,7 @@ export default async function WorkerClosingPage() {
         today={today}
         existingStatus={existing?.status ?? null}
         platforms={platforms}
+        registerCashFils={registerCashFils}
       />
     </div>
   );

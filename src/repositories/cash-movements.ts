@@ -77,6 +77,30 @@ export async function getBankBalance(db: SupabaseClient): Promise<number> {
   return sumBalance(db, "bank");
 }
 
+/**
+ * Net register cash from movements dated strictly before `date` (in − out).
+ * This is the cash "carried over" into a day before that day's own sales and
+ * cash-outs — the opening balance used by the EOD drawer reconciliation.
+ */
+export async function getRegisterBalanceBefore(
+  db: SupabaseClient,
+  date: string,
+): Promise<number> {
+  const { data, error } = await db
+    .from("cash_movements")
+    .select("direction, amount_fils")
+    .eq("account", "register")
+    .lt("occurred_on", date);
+
+  if (error) throw error;
+  return data.reduce(
+    (sum, r) =>
+      sum +
+      (r.direction === "in" ? Number(r.amount_fils) : -Number(r.amount_fils)),
+    0,
+  );
+}
+
 /** Sum money-in − money-out, optionally restricted to one account. */
 async function sumBalance(
   db: SupabaseClient,

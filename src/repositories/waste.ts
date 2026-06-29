@@ -56,6 +56,23 @@ export async function listPendingWasteLogs(
   return enrichWasteLogs(db, data.map(toWasteLog));
 }
 
+/** Non-voided waste logs that occurred on a given date, with item + submitter names. */
+export async function listWasteLogsForDate(
+  db: SupabaseClient,
+  date: string,
+): Promise<WasteLogWithDetails[]> {
+  const { data, error } = await db
+    .from("waste_logs")
+    .select("*")
+    .gte("occurred_at", `${date}T00:00:00`)
+    .lt("occurred_at", `${date}T23:59:59.999`)
+    .neq("status", "voided")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return enrichWasteLogs(db, data.map(toWasteLog));
+}
+
 export async function listWorkerTodayWaste(
   db: SupabaseClient,
   userId: string,
