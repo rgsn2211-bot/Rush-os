@@ -267,13 +267,13 @@ export function ProductForm({
                           <td className="px-5 py-3 text-right">
                             <input
                               type="number"
-                              min="0.001"
+                              min="0"
                               step="any"
                               value={r.qtyBase}
                               onChange={(e) =>
                                 updateQty(i, Number(e.target.value) || 0)
                               }
-                              className="border-line w-16 rounded-lg border px-2 py-1.5 text-right font-mono text-[13px] outline-none focus:border-navy"
+                              className="border-line w-24 rounded-lg border px-2 py-1.5 text-right font-mono text-[13px] outline-none focus:border-navy"
                             />
                           </td>
                           <td className="text-ink-3 px-5 py-3">{r.baseUnit}</td>
