@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ReviewStatus } from "@/types/inventory";
 import type { DeliveryPlatformLite } from "@/types/delivery";
-import { formatBhd } from "@/lib/calculations/currency";
+import { formatBhd, formatFils } from "@/lib/calculations/currency";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -34,6 +34,8 @@ interface ClosingWizardProps {
   today: string;
   existingStatus: ReviewStatus | null;
   platforms: DeliveryPlatformLite[];
+  /** Current system register cash (fils) — shown for reference during the count. */
+  registerCashFils: number;
 }
 
 function num(s: string): number {
@@ -58,6 +60,7 @@ export function ClosingWizard({
   today,
   existingStatus,
   platforms,
+  registerCashFils,
 }: ClosingWizardProps) {
   const router = useRouter();
   const [step, setStep] = useState(0);
@@ -111,8 +114,6 @@ export function ClosingWizard({
     (s, d) => s + d * (parseInt(counts[String(d)] || "0", 10) || 0),
     0,
   );
-  const expectedCash = num(cashSales);
-  const diff = countedTotal - expectedCash;
 
   if (existingStatus && !done) {
     const label =
@@ -438,32 +439,30 @@ export function ClosingWizard({
               ))}
             </CardContent>
           </Card>
-          <div className="mt-4 grid grid-cols-3 gap-3">
-            {[
-              ["Counted", countedTotal, "text-ink"],
-              ["Expected", expectedCash, "text-ink-2"],
-              [
-                "Difference",
-                diff,
-                Math.abs(diff) < 0.001 ? "text-green-600" : "text-rush-red",
-              ],
-            ].map(([label, value, color]) => (
-              <Card key={label as string} className="text-center">
-                <CardContent>
-                  <div className="text-ink-3 mb-1 text-xs">
-                    {label as string}
-                  </div>
-                  <div className={`font-mono text-lg font-bold ${color}`}>
-                    {((value as number) < 0 ? "−" : "") +
-                      formatBhd(Math.abs(value as number))}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <Card className="text-center">
+              <CardContent>
+                <div className="text-ink-3 mb-1 text-xs">Counted</div>
+                <div className="text-ink font-mono text-lg font-bold">
+                  {formatBhd(countedTotal)}
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="text-center">
+              <CardContent>
+                <div className="text-ink-3 mb-1 text-xs">
+                  Register (system)
+                </div>
+                <div className="text-ink-2 font-mono text-lg font-bold">
+                  {formatFils(registerCashFils)}
+                </div>
+              </CardContent>
+            </Card>
           </div>
           <p className="text-ink-3 mt-3 text-xs leading-relaxed">
-            Expected cash is today&apos;s cash sales. The owner reviews any
-            difference.
+            Count the drawer as it is. The owner reconciles your count against
+            the register — carried-over cash plus today&apos;s cash sales, minus
+            cash purchases and withdrawals.
           </p>
         </>
       )}
@@ -489,10 +488,6 @@ export function ClosingWizard({
                   ["Delivery sales", `${formatBhd(deliveryTotal)} BHD`],
                   ["Discount", `${formatBhd(num(discount))} BHD`],
                   ["Cash counted", `${formatBhd(countedTotal)} BHD`],
-                  [
-                    "Cash difference",
-                    `${diff < 0 ? "−" : ""}${formatBhd(Math.abs(diff))} BHD`,
-                  ],
                   [
                     "Sales by Item",
                     uploadSummary ? "Uploaded" : "Not uploaded",

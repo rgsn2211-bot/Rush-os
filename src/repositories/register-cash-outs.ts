@@ -78,6 +78,27 @@ export async function listWorkerTodayCashOuts(
   return data.map(toCashOut);
 }
 
+/**
+ * Non-voided register cash-outs created on a given date (any submitter). Used by
+ * the EOD drawer reconciliation: this is cash that physically left the register
+ * that day, whether the owner has approved it yet or not.
+ */
+export async function listRegisterCashOutsForDate(
+  db: SupabaseClient,
+  date: string,
+): Promise<RegisterCashOut[]> {
+  const { data, error } = await db
+    .from("register_cash_outs")
+    .select("*")
+    .gte("created_at", `${date}T00:00:00`)
+    .lt("created_at", `${date}T23:59:59.999`)
+    .neq("status", "voided")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data.map(toCashOut);
+}
+
 export async function getRegisterCashOut(
   db: SupabaseClient,
   id: string,

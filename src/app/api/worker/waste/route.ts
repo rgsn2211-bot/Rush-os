@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUser } from "@/lib/auth";
-import { wasteLogCreateSchema } from "@/lib/validators/waste";
-import { logWaste } from "@/services/waste";
+import { wasteLogBatchCreateSchema } from "@/lib/validators/waste";
+import { logWasteBatch } from "@/services/waste";
 
 export async function POST(request: NextRequest) {
   const db = await createClient();
@@ -15,13 +15,13 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const parsed = wasteLogCreateSchema.safeParse(body);
+  const parsed = wasteLogBatchCreateSchema.safeParse(body);
   if (!parsed.success) {
     return Response.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
   try {
-    const result = await logWaste(db, parsed.data, authUser.id);
+    const result = await logWasteBatch(db, parsed.data, authUser.id);
     return Response.json(result, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to submit";

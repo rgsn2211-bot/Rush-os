@@ -174,6 +174,24 @@ export async function updateDailyClosingStatus(
   if (error) throw error;
 }
 
+/** Overwrite the stored drawer reconciliation (expected + variance) for a closing. */
+export async function updateDailyClosingReconciliation(
+  db: SupabaseClient,
+  id: string,
+  cashExpectedFils: number,
+  cashVarianceFils: number,
+): Promise<void> {
+  const { error } = await db
+    .from("daily_closings")
+    .update({
+      cash_expected_fils: cashExpectedFils,
+      cash_variance_fils: cashVarianceFils,
+    })
+    .eq("id", id);
+
+  if (error) throw error;
+}
+
 export async function deleteDailyClosing(
   db: SupabaseClient,
   id: string,

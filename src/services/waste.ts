@@ -1,6 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { WasteLog, WasteLogWithDetails } from "@/types/inventory";
-import type { WasteLogCreateInput } from "@/lib/validators/waste";
+import type {
+  WasteLogCreateInput,
+  WasteLogBatchCreateInput,
+} from "@/lib/validators/waste";
 import {
   insertWasteLog,
   listWasteLogs,
@@ -37,6 +40,38 @@ export async function logWaste(
     notes: input.notes,
     createdBy,
   });
+}
+
+/**
+ * Worker logs several wasted items at once. Each line is validated and stored as
+ * its own waste_log row (status needs_review); inventory is not touched until the
+ * owner approves each one. Item lookups are shared so the ops view is read once.
+ */
+export async function logWasteBatch(
+  db: SupabaseClient,
+  input: WasteLogBatchCreateInput,
+  createdBy: string,
+): Promise<WasteLog[]> {
+  const items = await listInventoryItemsOps(db);
+  const itemMap = new Map(items.map((i) => [i.id, i]));
+
+  const created: WasteLog[] = [];
+  for (const line of input.items) {
+    const item = itemMap.get(line.inventoryItemId);
+    if (!item) throw new Error("Inventory item not found");
+
+    const baseQty = line.stockQty * item.basePerStock;
+    const log = await insertWasteLog(db, {
+      inventoryItemId: line.inventoryItemId,
+      baseQty,
+      reason: line.reason,
+      notes: line.notes,
+      createdBy,
+    });
+    created.push(log);
+  }
+
+  return created;
 }
 
 export async function getAllWaste(

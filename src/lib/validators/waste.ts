@@ -23,6 +23,20 @@ export const wasteLogCreateSchema = z.object({
 });
 export type WasteLogCreateInput = z.infer<typeof wasteLogCreateSchema>;
 
+/**
+ * A worker can record several wasted items in one submission. Each line becomes
+ * its own waste_log row (so the owner reviews — and approves/rejects — each item
+ * individually). At least one line is required.
+ */
+export const wasteLogBatchCreateSchema = z.object({
+  items: z
+    .array(wasteLogCreateSchema)
+    .min(1, "Add at least one item"),
+});
+export type WasteLogBatchCreateInput = z.infer<
+  typeof wasteLogBatchCreateSchema
+>;
+
 export const wasteReviewSchema = z.object({
   action: z.enum(["approve", "reject"]),
 });

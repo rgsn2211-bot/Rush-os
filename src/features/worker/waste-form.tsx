@@ -19,6 +19,17 @@ const REASON_LABELS: Record<string, string> = {
   other: "Other",
 };
 
+interface WasteLine {
+  inventoryItemId: string;
+  name: string;
+  stockUnit: string;
+  basePerStock: number;
+  stockBaseQty: number;
+  stockQty: string;
+  reason: string;
+  notes: string;
+}
+
 interface WasteFormProps {
   items: InventoryItemOps[];
   todayLogs: WasteLog[];
@@ -30,39 +41,56 @@ export function WasteForm({ items, todayLogs: initialLogs }: WasteFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const [selectedItemId, setSelectedItemId] = useState<string>("");
-  const [stockQty, setStockQty] = useState("");
-  const [reason, setReason] = useState("");
-  const [notes, setNotes] = useState("");
+  const [lines, setLines] = useState<WasteLine[]>([]);
+  const [showPicker, setShowPicker] = useState(false);
 
   const [todayLogs, setTodayLogs] = useState<WasteLog[]>(initialLogs);
 
   const itemMap = new Map(items.map((i) => [i.id, i]));
-  const selectedItem = selectedItemId ? itemMap.get(selectedItemId) : undefined;
 
-  function resetForm() {
-    setSelectedItemId("");
-    setStockQty("");
-    setReason("");
-    setNotes("");
-    setError(null);
+  function addLine(item: InventoryItemOps) {
+    if (lines.some((l) => l.inventoryItemId === item.id)) return;
+    setLines([
+      ...lines,
+      {
+        inventoryItemId: item.id,
+        name: item.name,
+        stockUnit: item.stockUnit,
+        basePerStock: item.basePerStock,
+        stockBaseQty: item.stockBaseQty,
+        stockQty: "",
+        reason: "",
+        notes: "",
+      },
+    ]);
+    setShowPicker(false);
+  }
+
+  function updateLine(index: number, patch: Partial<WasteLine>) {
+    setLines(lines.map((l, i) => (i === index ? { ...l, ...patch } : l)));
+  }
+
+  function removeLine(index: number) {
+    setLines(lines.filter((_, i) => i !== index));
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
-    if (!selectedItemId) {
-      setError("Select an item.");
+    if (lines.length === 0) {
+      setError("Add at least one item.");
       return;
     }
-    if (!stockQty || Number(stockQty) <= 0) {
-      setError("Enter a valid quantity.");
-      return;
-    }
-    if (!reason) {
-      setError("Select a reason.");
-      return;
+    for (const l of lines) {
+      if (!l.stockQty || Number(l.stockQty) <= 0) {
+        setError(`Enter a valid quantity for ${l.name}.`);
+        return;
+      }
+      if (!l.reason) {
+        setError(`Select a reason for ${l.name}.`);
+        return;
+      }
     }
 
     setLoading(true);
@@ -71,10 +99,12 @@ export function WasteForm({ items, todayLogs: initialLogs }: WasteFormProps) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        inventoryItemId: selectedItemId,
-        stockQty: Number(stockQty),
-        reason,
-        notes: notes.trim() || undefined,
+        items: lines.map((l) => ({
+          inventoryItemId: l.inventoryItemId,
+          stockQty: Number(l.stockQty),
+          reason: l.reason,
+          notes: l.notes.trim() || undefined,
+        })),
       }),
     });
 
@@ -94,9 +124,9 @@ export function WasteForm({ items, todayLogs: initialLogs }: WasteFormProps) {
       return;
     }
 
-    const newLog = await res.json();
-    setTodayLogs([newLog, ...todayLogs]);
-    resetForm();
+    const newLogs: WasteLog[] = await res.json();
+    setTodayLogs([...newLogs, ...todayLogs]);
+    setLines([]);
     setLoading(false);
     router.refresh();
   }
@@ -123,78 +153,123 @@ export function WasteForm({ items, todayLogs: initialLogs }: WasteFormProps) {
     return `${stockQtyValue} ${item.stockUnit}`;
   }
 
+  const usedIds = new Set(lines.map((l) => l.inventoryItemId));
+  const availableItems = items.filter((i) => !usedIds.has(i.id));
+
   return (
     <div className="pb-24">
       <form onSubmit={handleSubmit}>
-        <Card className="mb-4">
-          <CardContent>
-            <div className="flex flex-col gap-4">
-              <div>
-                <Label htmlFor="item">Item</Label>
-                <Select
-                  id="item"
-                  value={selectedItemId}
-                  onChange={(e) => setSelectedItemId(e.target.value)}
+        {lines.map((l, i) => (
+          <Card key={l.inventoryItemId} className="mb-3.5">
+            <CardContent>
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-navy text-sm font-bold">
+                  Item {i + 1}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeLine(i)}
+                  className="text-rush-red text-[13px] font-semibold"
                 >
-                  <option value="">Select item...</option>
-                  {items.map((i) => (
-                    <option key={i.id} value={i.id}>
-                      {i.name}
-                    </option>
-                  ))}
-                </Select>
+                  Remove
+                </button>
               </div>
 
-              <div>
-                <Label htmlFor="qty">
-                  Quantity{selectedItem ? ` (${selectedItem.stockUnit})` : ""}
-                </Label>
+              <div className="mb-3 text-[15px] font-semibold">{l.name}</div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Quantity ({l.stockUnit})</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={l.stockQty}
+                    onChange={(e) =>
+                      updateLine(i, { stockQty: e.target.value })
+                    }
+                    placeholder="0"
+                    className="font-mono"
+                  />
+                </div>
+                <div>
+                  <Label>Reason</Label>
+                  <Select
+                    value={l.reason}
+                    onChange={(e) => updateLine(i, { reason: e.target.value })}
+                  >
+                    <option value="">Select...</option>
+                    {WASTE_REASONS.map((r) => (
+                      <option key={r} value={r}>
+                        {REASON_LABELS[r] || r}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+
+              <div className="mt-3">
+                <Label>Notes (optional)</Label>
                 <Input
-                  id="qty"
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={stockQty}
-                  onChange={(e) => setStockQty(e.target.value)}
-                  placeholder="0"
-                  className="font-mono"
-                />
-                {selectedItem && (
-                  <div className="text-ink-3 mt-1 text-xs">
-                    On hand: {selectedItem.stockBaseQty / (selectedItem.basePerStock || 1)}{" "}
-                    {selectedItem.stockUnit}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <Label htmlFor="reason">Reason</Label>
-                <Select
-                  id="reason"
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                >
-                  <option value="">Select reason...</option>
-                  {WASTE_REASONS.map((r) => (
-                    <option key={r} value={r}>
-                      {REASON_LABELS[r] || r}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-
-              <div>
-                <Label htmlFor="notes">Notes (optional)</Label>
-                <Input
-                  id="notes"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
+                  value={l.notes}
+                  onChange={(e) => updateLine(i, { notes: e.target.value })}
                   placeholder="Additional details..."
                 />
               </div>
-            </div>
-          </CardContent>
-        </Card>
+
+              <div className="text-ink-3 mt-2.5 text-xs">
+                On hand: {l.stockBaseQty / (l.basePerStock || 1)} {l.stockUnit}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+
+        {/* Add item button / picker */}
+        {showPicker ? (
+          <Card className="mb-4">
+            <CardContent>
+              <div className="mb-2 text-sm font-semibold">Select item</div>
+              {availableItems.length === 0 ? (
+                <p className="text-ink-3 text-sm">
+                  {items.length === 0
+                    ? "No inventory items yet."
+                    : "All items are already added."}
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {availableItems.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => addLine(item)}
+                      className="border-line text-navy cursor-pointer rounded-full border bg-white px-3 py-1.5 text-[13px] font-semibold hover:bg-gray-50"
+                    >
+                      + {item.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowPicker(false)}
+                className="text-ink-3 mt-2 text-xs font-semibold"
+              >
+                Cancel
+              </button>
+            </CardContent>
+          </Card>
+        ) : (
+          <Button
+            type="button"
+            variant="secondary"
+            full
+            size="lg"
+            className="mb-4 border-dashed"
+            onClick={() => setShowPicker(true)}
+          >
+            + Add item
+          </Button>
+        )}
 
         {error && (
           <div className="bg-rush-red-bg text-rush-red mb-4 rounded-xl px-4 py-3 text-sm">
@@ -204,7 +279,17 @@ export function WasteForm({ items, todayLogs: initialLogs }: WasteFormProps) {
 
         <div className="fixed bottom-0 left-0 right-0 border-t border-gray-200 bg-white/95 px-[22px] py-4 backdrop-blur-sm">
           <div className="mx-auto max-w-[540px]">
-            <Button type="submit" full size="lg" disabled={loading}>
+            {lines.length > 0 && (
+              <div className="text-ink-2 mb-2 text-sm">
+                {lines.length} item{lines.length > 1 ? "s" : ""}
+              </div>
+            )}
+            <Button
+              type="submit"
+              full
+              size="lg"
+              disabled={loading || lines.length === 0}
+            >
               {loading ? "Submitting..." : "Record Waste"}
             </Button>
           </div>
