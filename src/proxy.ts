@@ -49,6 +49,12 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
+  // Self-registration is disabled — Rush OS runs with a fixed set of accounts.
+  // Send any stale /signup links to the login page instead of 404.
+  if (pathname === "/signup") {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+
   if (!user && (pathname.startsWith("/owner") || pathname.startsWith("/worker"))) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
