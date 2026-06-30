@@ -3,7 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { InventoryItem, Supplier } from "@/types/inventory";
-import { formatFils, bhdToFils, filsToBhd } from "@/lib/calculations/currency";
+import {
+  formatFils,
+  bhdRateToFils,
+  filsToBhd,
+} from "@/lib/calculations/currency";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -81,7 +85,7 @@ export function InventoryItemForm({ suppliers, item }: InventoryItemFormProps) {
       safetyDays: Number(safetyDays) || 0,
       supplierId: supplierId || undefined,
       defaultCostFils: defaultCostBhd
-        ? bhdToFils(Number(defaultCostBhd))
+        ? bhdRateToFils(Number(defaultCostBhd))
         : 0,
       costingMethod,
     };
@@ -272,12 +276,27 @@ export function InventoryItemForm({ suppliers, item }: InventoryItemFormProps) {
                     id="defaultCostBhd"
                     type="number"
                     min="0"
-                    step="0.001"
+                    step="any"
                     value={defaultCostBhd}
                     onChange={(e) => setDefaultCostBhd(e.target.value)}
                     placeholder="0.000"
                     className="font-mono"
                   />
+                  {Number(defaultCostBhd) > 0 &&
+                    Number(basePerStock) > 0 &&
+                    baseUnit !== stockUnit && (
+                      <p className="text-ink-3 mt-1 text-xs">
+                        ≈{" "}
+                        {formatFils(
+                          Math.round(
+                            Number(defaultCostBhd) *
+                              1000 *
+                              Number(basePerStock),
+                          ),
+                        )}{" "}
+                        BHD per {stockUnit}
+                      </p>
+                    )}
                 </div>
                 <div>
                   <Label htmlFor="costingMethod">Costing method</Label>

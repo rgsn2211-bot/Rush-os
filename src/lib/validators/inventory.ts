@@ -36,7 +36,9 @@ export const inventoryItemCreateSchema = z.object({
   maxBaseQty: z.number().nonnegative().optional(),
   safetyDays: z.number().int().nonnegative().default(0),
   supplierId: z.string().uuid().optional(),
-  defaultCostFils: fils.default(0),
+  // A per-base-unit cost RATE, not a money amount: for cheap items one base
+  // unit (ml, g) can cost a fraction of a fil, so fractional values are valid.
+  defaultCostFils: z.number().nonnegative().default(0),
   costingMethod: costingMethodSchema.default("weighted_average"),
 });
 export type InventoryItemCreateInput = z.infer<

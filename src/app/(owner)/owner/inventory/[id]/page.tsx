@@ -2,7 +2,7 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getItem } from "@/services/inventory";
-import { formatFils } from "@/lib/calculations/currency";
+import { formatFils, formatFilsRate } from "@/lib/calculations/currency";
 import { effectiveUnitCostFils } from "@/lib/calculations/costing";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent } from "@/components/ui/card";
@@ -162,7 +162,7 @@ export default async function InventoryItemPage({
                   </span>
                   <span className="font-mono font-semibold">
                     {item.defaultCostFils > 0
-                      ? `${formatFils(item.defaultCostFils)} BHD`
+                      ? `${formatFilsRate(item.defaultCostFils)} BHD`
                       : "—"}
                   </span>
                 </div>
