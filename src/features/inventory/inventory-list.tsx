@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { InventoryItem } from "@/types/inventory";
-import { formatFils } from "@/lib/calculations/currency";
+import { formatFils, formatFilsRate } from "@/lib/calculations/currency";
 import { effectiveUnitCostFils } from "@/lib/calculations/costing";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -60,7 +60,7 @@ export function InventoryList({ items }: InventoryListProps) {
         );
         return (
           <span className="text-ink-2 font-mono">
-            {avg > 0 ? formatFils(Math.round(avg)) : "—"}
+            {avg > 0 ? formatFilsRate(avg) : "—"}
           </span>
         );
       },

@@ -75,7 +75,7 @@ export default async function InventoryItemPage({
                     Unit cost
                   </div>
                   <div className="mt-1 font-mono text-lg font-bold">
-                    {unitCost > 0 ? `${formatFils(Math.round(unitCost))} BHD` : "—"}
+                    {unitCost > 0 ? `${formatFilsRate(unitCost)} BHD` : "—"}
                   </div>
                   <div className="text-ink-3 mt-0.5 text-xs">
                     per {item.baseUnit} ·{" "}
