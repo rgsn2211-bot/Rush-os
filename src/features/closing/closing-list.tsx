@@ -6,11 +6,14 @@ import type {
   DailyClosingWithSubmitter,
   ClosingReviewDetails,
 } from "@/types/closing";
-import { formatFils } from "@/lib/calculations/currency";
+import type { DeliveryPlatformLite } from "@/types/delivery";
+import { formatFils, filsToBhd } from "@/lib/calculations/currency";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ClosingCalendar } from "@/features/closing/closing-calendar";
+import { ClosingForm, type ClosingFormInitial } from "@/features/closing/closing-form";
 import {
   Check,
   X,
@@ -20,6 +23,7 @@ import {
   Trash2,
   Gift,
   Banknote,
+  Pencil,
 } from "lucide-react";
 
 const WASTE_REASON_LABELS: Record<string, string> = {
@@ -32,11 +36,21 @@ const WASTE_REASON_LABELS: Record<string, string> = {
 
 interface Props {
   closings: DailyClosingWithSubmitter[];
+  platforms: DeliveryPlatformLite[];
+  today: string;
 }
 
 type Filter = "all" | "pending" | "reviewed";
 
-export function ClosingList({ closings }: Props) {
+/** Fils -> BHD input string; blank for zero so the placeholder shows. */
+function bhdStr(fils: number): string {
+  return fils ? String(filsToBhd(fils)) : "";
+}
+function countStr(n: number): string {
+  return n ? String(n) : "";
+}
+
+export function ClosingList({ closings, platforms, today }: Props) {
   const router = useRouter();
   const [filter, setFilter] = useState<Filter>("all");
   const [loadingId, setLoadingId] = useState<string | null>(null);
@@ -47,20 +61,53 @@ export function ClosingList({ closings }: Props) {
   );
   const [detailsLoadingId, setDetailsLoadingId] = useState<string | null>(null);
 
+  // Calendar-driven back-fill + editing.
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [creatingDate, setCreatingDate] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const byDate = new Map(closings.map((c) => [c.reportDate, c]));
+
+  async function ensureDetails(id: string) {
+    if (details[id]) return;
+    setDetailsLoadingId(id);
+    const res = await fetch(`/api/closing/${id}/details`);
+    if (res.ok) {
+      const data: ClosingReviewDetails = await res.json();
+      setDetails((d) => ({ ...d, [id]: data }));
+    }
+    setDetailsLoadingId(null);
+  }
+
   async function toggleDetails(id: string) {
     if (expandedId === id) {
       setExpandedId(null);
       return;
     }
+    setEditingId(null);
     setExpandedId(id);
-    if (!details[id]) {
-      setDetailsLoadingId(id);
-      const res = await fetch(`/api/closing/${id}/details`);
-      if (res.ok) {
-        const data: ClosingReviewDetails = await res.json();
-        setDetails((d) => ({ ...d, [id]: data }));
-      }
-      setDetailsLoadingId(null);
+    await ensureDetails(id);
+  }
+
+  async function startEdit(id: string) {
+    setExpandedId(null);
+    await ensureDetails(id);
+    setEditingId(id);
+  }
+
+  function handleSelectDate(date: string | null) {
+    setSelectedDate(date);
+    setCreatingDate(null);
+    setEditingId(null);
+    if (!date) return;
+    const existing = byDate.get(date);
+    if (existing) {
+      // Reveal that day's row for review / edit.
+      setFilter("all");
+      setExpandedId(existing.id);
+      void ensureDetails(existing.id);
+    } else {
+      setCreatingDate(date);
     }
   }
 
@@ -121,8 +168,61 @@ export function ClosingList({ closings }: Props) {
     return `${sign}${formatFils(Math.abs(v))} BHD`;
   }
 
+  function editInitial(c: DailyClosingWithSubmitter): ClosingFormInitial {
+    const det = details[c.id];
+    const delivery: Record<string, { sales: string; orders: string }> = {};
+    if (det) {
+      for (const line of det.deliveryLines) {
+        delivery[line.platformId] = {
+          sales: bhdStr(line.salesFils),
+          orders: countStr(line.orders),
+        };
+      }
+    }
+    return {
+      discountBhd: bhdStr(c.discountFils),
+      cashSalesBhd: bhdStr(c.cashSalesFils),
+      cashOrders: countStr(c.cashOrders),
+      cardSalesBhd: bhdStr(c.cardSalesFils),
+      cardOrders: countStr(c.cardOrders),
+      benefitpaySalesBhd: bhdStr(c.benefitpaySalesFils),
+      benefitpayOrders: countStr(c.benefitpayOrders),
+      cashCountedBhd: bhdStr(c.cashCountedFils),
+      notes: c.notes ?? "",
+      delivery,
+    };
+  }
+
   return (
     <div>
+      <ClosingCalendar
+        closings={closings.map((c) => ({
+          reportDate: c.reportDate,
+          status: c.status,
+        }))}
+        selectedDate={selectedDate}
+        onSelectDate={handleSelectDate}
+        today={today}
+      />
+
+      {creatingDate && (
+        <div className="mb-5">
+          <ClosingForm
+            mode="create"
+            reportDate={creatingDate}
+            platforms={platforms}
+            onDone={() => {
+              setCreatingDate(null);
+              setSelectedDate(null);
+            }}
+            onCancel={() => {
+              setCreatingDate(null);
+              setSelectedDate(null);
+            }}
+          />
+        </div>
+      )}
+
       <div className="mb-5 grid grid-cols-3 gap-3">
         {categories.map((cat) => (
           <button
@@ -190,55 +290,95 @@ export function ClosingList({ closings }: Props) {
                 </div>
               </div>
 
-              <div className="mt-3 flex flex-wrap gap-2 pl-14">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => toggleDetails(c.id)}
-                >
-                  {expandedId === c.id ? (
-                    <ChevronUp size={14} className="mr-1" />
+              {editingId === c.id ? (
+                <div className="mt-3 pl-14">
+                  {detailsLoadingId === c.id && !details[c.id] ? (
+                    <div className="text-ink-3 text-sm">Loading…</div>
                   ) : (
-                    <ChevronDown size={14} className="mr-1" />
+                    <ClosingForm
+                      mode="edit"
+                      reportDate={c.reportDate}
+                      closingId={c.id}
+                      platforms={platforms}
+                      initial={editInitial(c)}
+                      onDone={() => {
+                        setEditingId(null);
+                        // Figures + reconciliation changed — drop cached detail.
+                        setDetails((d) => {
+                          const next = { ...d };
+                          delete next[c.id];
+                          return next;
+                        });
+                      }}
+                      onCancel={() => setEditingId(null)}
+                    />
                   )}
-                  Details
-                </Button>
-                {c.status === "needs_review" && (
-                  <>
-                    <Button
-                      size="sm"
-                      onClick={() => handleReview(c.id, "approve")}
-                      disabled={loadingId === c.id}
-                    >
-                      <Check size={14} className="mr-1" />
-                      Approve
-                    </Button>
+                </div>
+              ) : (
+                <>
+                  <div className="mt-3 flex flex-wrap gap-2 pl-14">
                     <Button
                       size="sm"
                       variant="secondary"
-                      onClick={() => handleReview(c.id, "reject")}
-                      disabled={loadingId === c.id}
-                      className="text-rush-red"
+                      onClick={() => toggleDetails(c.id)}
                     >
-                      <X size={14} className="mr-1" />
-                      Reject
+                      {expandedId === c.id ? (
+                        <ChevronUp size={14} className="mr-1" />
+                      ) : (
+                        <ChevronDown size={14} className="mr-1" />
+                      )}
+                      Details
                     </Button>
-                  </>
-                )}
-              </div>
+                    {c.status !== "voided" && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => startEdit(c.id)}
+                      >
+                        <Pencil size={14} className="mr-1" />
+                        Edit
+                      </Button>
+                    )}
+                    {c.status === "needs_review" && (
+                      <>
+                        <Button
+                          size="sm"
+                          onClick={() => handleReview(c.id, "approve")}
+                          disabled={loadingId === c.id}
+                        >
+                          <Check size={14} className="mr-1" />
+                          Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => handleReview(c.id, "reject")}
+                          disabled={loadingId === c.id}
+                          className="text-rush-red"
+                        >
+                          <X size={14} className="mr-1" />
+                          Reject
+                        </Button>
+                      </>
+                    )}
+                  </div>
 
-              {expandedId === c.id && (
-                <div className="mt-3 pl-14">
-                  {detailsLoadingId === c.id && !details[c.id] ? (
-                    <div className="text-ink-3 text-sm">Loading details…</div>
-                  ) : details[c.id] ? (
-                    <ClosingDetails data={details[c.id]} closing={c} />
-                  ) : (
-                    <div className="text-ink-3 text-sm">
-                      Could not load details.
+                  {expandedId === c.id && (
+                    <div className="mt-3 pl-14">
+                      {detailsLoadingId === c.id && !details[c.id] ? (
+                        <div className="text-ink-3 text-sm">
+                          Loading details…
+                        </div>
+                      ) : details[c.id] ? (
+                        <ClosingDetails data={details[c.id]} closing={c} />
+                      ) : (
+                        <div className="text-ink-3 text-sm">
+                          Could not load details.
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
+                </>
               )}
             </div>
           ))}

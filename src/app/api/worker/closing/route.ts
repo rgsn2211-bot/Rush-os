@@ -6,6 +6,7 @@ import { dailyClosingCreateSchema } from "@/lib/validators/closing";
 import {
   submitDailyClosing,
   computeExpectedCashFils,
+  getClosingForDate,
 } from "@/services/daily-closing";
 import { bhdToFils } from "@/lib/calculations/currency";
 
@@ -30,6 +31,18 @@ export async function POST(request: NextRequest) {
     // RLS — compute it with the service-role client, then store the closing as
     // the worker (so RLS still gates the insert).
     const admin = createAdminClient();
+
+    // A worker can't see closings created by others under RLS, so check for an
+    // existing closing on this date with the admin client — a clean 400 instead
+    // of a raw unique-index error.
+    const existing = await getClosingForDate(admin, parsed.data.reportDate);
+    if (existing) {
+      return Response.json(
+        { error: "A closing for this date already exists" },
+        { status: 400 },
+      );
+    }
+
     const cashExpectedFils = await computeExpectedCashFils(
       admin,
       parsed.data.reportDate,

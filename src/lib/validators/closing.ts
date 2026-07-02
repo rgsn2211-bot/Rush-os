@@ -17,8 +17,8 @@ export const deliveryLineSchema = z.object({
  * and delivery_sales are summed in the service. cash_counted is the drawer
  * total; the service computes the expected cash and the variance.
  */
-export const dailyClosingCreateSchema = z.object({
-  reportDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
+/** The figure fields common to creating and editing a closing (no report_date). */
+export const closingFiguresSchema = z.object({
   discountBhd: moneyBhd.default(0),
   cashSalesBhd: moneyBhd.default(0),
   cashOrders: orderCount,
@@ -30,7 +30,19 @@ export const dailyClosingCreateSchema = z.object({
   cashCountedBhd: moneyBhd.default(0),
   notes: z.string().trim().optional(),
 });
+
+export const dailyClosingCreateSchema = closingFiguresSchema.extend({
+  reportDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
+});
 export type DailyClosingCreateInput = z.infer<typeof dailyClosingCreateSchema>;
+
+/**
+ * What the owner submits when editing an existing closing. Same figures as a
+ * create, but the report_date is immutable (changing it could collide with the
+ * one-non-voided-closing-per-date unique index), so it is omitted here.
+ */
+export const dailyClosingUpdateSchema = closingFiguresSchema;
+export type DailyClosingUpdateInput = z.infer<typeof dailyClosingUpdateSchema>;
 
 export const dailyClosingReviewSchema = z.object({
   action: z.enum(["approve", "reject"]),
