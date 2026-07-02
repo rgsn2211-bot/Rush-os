@@ -4,16 +4,23 @@ import type {
   DailyClosingWithSubmitter,
   ClosingReviewDetails,
 } from "@/types/closing";
-import type { DailyClosingCreateInput } from "@/lib/validators/closing";
+import type {
+  DailyClosingCreateInput,
+  DailyClosingUpdateInput,
+} from "@/lib/validators/closing";
 import { bhdToFils } from "@/lib/calculations/currency";
+import { todayInBahrain } from "@/lib/dates";
 import {
   insertDailyClosing,
   insertDeliveryClosingLines,
   getDeliveryClosingLines,
+  deleteDeliveryClosingLines,
   listDailyClosings,
   listPendingDailyClosings,
+  listNonVoidedClosingDates,
   getDailyClosingByDate,
   getDailyClosing,
+  updateDailyClosing,
   updateDailyClosingStatus,
   updateDailyClosingReconciliation,
   deleteDailyClosing,
@@ -22,8 +29,13 @@ import {
   insertCashMovement,
   getRegisterBalance,
   getRegisterBalanceBefore,
+  deleteCashMovementsBySource,
 } from "@/repositories/cash-movements";
-import { insertSettlement } from "@/repositories/settlements";
+import {
+  insertSettlement,
+  listSettlementsByClosing,
+  deletePendingSettlementsByClosing,
+} from "@/repositories/settlements";
 import { listRegisterCashOutsForDate } from "@/repositories/register-cash-outs";
 import { listCashPurchasesForDate } from "@/repositories/purchases";
 import { listWasteLogsForDate } from "@/repositories/waste";
@@ -76,24 +88,27 @@ export async function computeExpectedCashFils(
   return openingFils + cashSalesFils - cashOutFils;
 }
 
-/**
- * Worker submits the end-of-day closing. Money arrives in BHD and is converted
- * to fils here. Gross sales is the sum of the payment channels. The expected
- * drawer cash is computed by the caller (it needs to read the cash log, which
- * workers can't) and passed in; the variance is counted minus expected. Created
- * as needs_review; one closing per day.
- */
-export async function submitDailyClosing(
-  db: SupabaseClient,
-  input: DailyClosingCreateInput,
-  createdBy: string,
-  cashExpectedFils: number,
-): Promise<DailyClosing> {
-  const existing = await getDailyClosingByDate(db, input.reportDate);
-  if (existing) {
-    throw new Error("A closing for this date already exists");
-  }
+export interface ClosingFigures {
+  discountFils: number;
+  cashSalesFils: number;
+  cardSalesFils: number;
+  benefitpaySalesFils: number;
+  deliverySalesFils: number;
+  grossSalesFils: number;
+  totalOrders: number;
+  cashCountedFils: number;
+  /** Per-platform lines converted to fils (before the >0 filter). */
+  deliveryLines: { platformId: string; salesFils: number; orders: number }[];
+}
 
+/**
+ * Convert the BHD figures a closing carries into integer fils and derive the
+ * totals (delivery sales, gross sales, total orders). Shared by create and edit
+ * so both compute the stored numbers the exact same way.
+ */
+export function computeClosingFigures(
+  input: DailyClosingUpdateInput,
+): ClosingFigures {
   const cashSalesFils = bhdToFils(input.cashSalesBhd);
   const cardSalesFils = bhdToFils(input.cardSalesBhd);
   const benefitpaySalesFils = bhdToFils(input.benefitpaySalesBhd);
@@ -109,43 +124,146 @@ export async function submitDailyClosing(
   );
   const deliveryOrders = deliveryLines.reduce((sum, l) => sum + l.orders, 0);
 
-  const grossSalesFils =
-    cashSalesFils + cardSalesFils + benefitpaySalesFils + deliverySalesFils;
-  const totalOrders =
-    input.cashOrders +
-    input.cardOrders +
-    input.benefitpayOrders +
-    deliveryOrders;
+  return {
+    discountFils: bhdToFils(input.discountBhd),
+    cashSalesFils,
+    cardSalesFils,
+    benefitpaySalesFils,
+    deliverySalesFils,
+    grossSalesFils:
+      cashSalesFils + cardSalesFils + benefitpaySalesFils + deliverySalesFils,
+    totalOrders:
+      input.cashOrders +
+      input.cardOrders +
+      input.benefitpayOrders +
+      deliveryOrders,
+    cashCountedFils: bhdToFils(input.cashCountedBhd),
+    deliveryLines,
+  };
+}
 
-  const cashCountedFils = bhdToFils(input.cashCountedBhd);
-  const cashVarianceFils = cashCountedFils - cashExpectedFils;
+/**
+ * Submit an end-of-day closing (worker via the wizard, or owner back-filling a
+ * missed day). Money arrives in BHD and is converted to fils here. The expected
+ * drawer cash is computed by the caller (it needs to read the cash log, which
+ * workers can't) and passed in; the variance is counted minus expected. Created
+ * as needs_review; one non-voided closing per date, and never a future date.
+ */
+export async function submitDailyClosing(
+  db: SupabaseClient,
+  input: DailyClosingCreateInput,
+  createdBy: string,
+  cashExpectedFils: number,
+): Promise<DailyClosing> {
+  if (input.reportDate > todayInBahrain()) {
+    throw new Error("Cannot close a future date");
+  }
+
+  const existing = await getDailyClosingByDate(db, input.reportDate);
+  if (existing) {
+    throw new Error("A closing for this date already exists");
+  }
+
+  const f = computeClosingFigures(input);
 
   const closing = await insertDailyClosing(db, {
     reportDate: input.reportDate,
-    totalOrders,
-    discountFils: bhdToFils(input.discountBhd),
-    cashSalesFils,
+    totalOrders: f.totalOrders,
+    discountFils: f.discountFils,
+    cashSalesFils: f.cashSalesFils,
     cashOrders: input.cashOrders,
-    cardSalesFils,
+    cardSalesFils: f.cardSalesFils,
     cardOrders: input.cardOrders,
-    benefitpaySalesFils,
+    benefitpaySalesFils: f.benefitpaySalesFils,
     benefitpayOrders: input.benefitpayOrders,
-    deliverySalesFils,
-    grossSalesFils,
-    cashCountedFils,
+    deliverySalesFils: f.deliverySalesFils,
+    grossSalesFils: f.grossSalesFils,
+    cashCountedFils: f.cashCountedFils,
     cashExpectedFils,
-    cashVarianceFils,
+    cashVarianceFils: f.cashCountedFils - cashExpectedFils,
     notes: input.notes,
     createdBy,
   });
 
-  // Only persist platforms the worker actually entered (sales or orders > 0).
-  const linesToSave = deliveryLines.filter(
+  // Only persist platforms actually entered (sales or orders > 0).
+  const linesToSave = f.deliveryLines.filter(
     (l) => l.salesFils > 0 || l.orders > 0,
   );
   await insertDeliveryClosingLines(db, closing.id, linesToSave);
 
   return closing;
+}
+
+/**
+ * Owner edits an existing closing's figures. Recomputes all totals and the
+ * drawer reconciliation against the current cash log. Editing an already-approved
+ * day rewrites its posted money effects: the register cash-in and the auto-created
+ * settlements are reversed and re-posted with the new numbers. If any of those
+ * settlements was already reconciled (received into the bank), the edit is blocked
+ * so the bank balance can't be corrupted. The report date is immutable.
+ */
+export async function updateClosing(
+  db: SupabaseClient,
+  id: string,
+  input: DailyClosingUpdateInput,
+  editedBy: string,
+): Promise<DailyClosing> {
+  const closing = await getDailyClosing(db, id);
+  if (!closing) throw new Error("Closing not found");
+  if (closing.status === "voided") {
+    throw new Error("Cannot edit a rejected closing");
+  }
+
+  const f = computeClosingFigures(input);
+  const cashExpectedFils = await computeExpectedCashFils(
+    db,
+    closing.reportDate,
+    f.cashSalesFils,
+  );
+
+  const wasApproved = closing.status === "approved";
+  if (wasApproved) {
+    const settlements = await listSettlementsByClosing(db, id);
+    if (settlements.some((s) => s.status === "received")) {
+      throw new Error(
+        "This day's card, BenefitPay or delivery money has already been reconciled. Undo the reconciliation before editing this closing.",
+      );
+    }
+    // Reverse the previously posted effects; they are re-posted below.
+    await deleteCashMovementsBySource(db, "daily_closing", id);
+    await deletePendingSettlementsByClosing(db, id);
+  }
+
+  const updated = await updateDailyClosing(db, id, {
+    totalOrders: f.totalOrders,
+    discountFils: f.discountFils,
+    cashSalesFils: f.cashSalesFils,
+    cashOrders: input.cashOrders,
+    cardSalesFils: f.cardSalesFils,
+    cardOrders: input.cardOrders,
+    benefitpaySalesFils: f.benefitpaySalesFils,
+    benefitpayOrders: input.benefitpayOrders,
+    deliverySalesFils: f.deliverySalesFils,
+    grossSalesFils: f.grossSalesFils,
+    cashCountedFils: f.cashCountedFils,
+    cashExpectedFils,
+    cashVarianceFils: f.cashCountedFils - cashExpectedFils,
+    notes: input.notes,
+  });
+
+  // Replace the per-platform delivery lines with the edited set.
+  await deleteDeliveryClosingLines(db, id);
+  const linesToSave = f.deliveryLines.filter(
+    (l) => l.salesFils > 0 || l.orders > 0,
+  );
+  await insertDeliveryClosingLines(db, id, linesToSave);
+
+  // Re-post money for an approved day (reads the delivery lines just written).
+  if (wasApproved) {
+    await postApprovalEffects(db, updated, editedBy);
+  }
+
+  return updated;
 }
 
 export async function getAllClosings(
@@ -165,6 +283,13 @@ export async function getClosingForDate(
   reportDate: string,
 ): Promise<DailyClosing | null> {
   return getDailyClosingByDate(db, reportDate);
+}
+
+/** Dates (YYYY-MM-DD) that already have a non-voided closing. */
+export async function getNonVoidedClosingDates(
+  db: SupabaseClient,
+): Promise<string[]> {
+  return listNonVoidedClosingDates(db);
 }
 
 export async function deleteOwnClosing(

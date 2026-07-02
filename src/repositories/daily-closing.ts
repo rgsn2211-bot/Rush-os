@@ -174,6 +174,84 @@ export async function updateDailyClosingStatus(
   if (error) throw error;
 }
 
+export interface UpdateDailyClosingInput {
+  totalOrders: number;
+  discountFils: number;
+  cashSalesFils: number;
+  cashOrders: number;
+  cardSalesFils: number;
+  cardOrders: number;
+  benefitpaySalesFils: number;
+  benefitpayOrders: number;
+  deliverySalesFils: number;
+  grossSalesFils: number;
+  cashCountedFils: number;
+  cashExpectedFils: number;
+  cashVarianceFils: number;
+  notes?: string;
+}
+
+/** Overwrite all figure columns of a closing (owner edit). Does not touch date/status. */
+export async function updateDailyClosing(
+  db: SupabaseClient,
+  id: string,
+  input: UpdateDailyClosingInput,
+): Promise<DailyClosing> {
+  const { data, error } = await db
+    .from("daily_closings")
+    .update({
+      total_orders: input.totalOrders,
+      discount_fils: input.discountFils,
+      cash_sales_fils: input.cashSalesFils,
+      cash_orders: input.cashOrders,
+      card_sales_fils: input.cardSalesFils,
+      card_orders: input.cardOrders,
+      benefitpay_sales_fils: input.benefitpaySalesFils,
+      benefitpay_orders: input.benefitpayOrders,
+      delivery_sales_fils: input.deliverySalesFils,
+      gross_sales_fils: input.grossSalesFils,
+      cash_counted_fils: input.cashCountedFils,
+      cash_expected_fils: input.cashExpectedFils,
+      cash_variance_fils: input.cashVarianceFils,
+      notes: input.notes ?? null,
+    })
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return toDailyClosing(data);
+}
+
+/** Remove all delivery lines for a closing (edit replaces them). */
+export async function deleteDeliveryClosingLines(
+  db: SupabaseClient,
+  closingId: string,
+): Promise<void> {
+  const { error } = await db
+    .from("daily_closing_delivery_lines")
+    .delete()
+    .eq("closing_id", closingId);
+  if (error) throw error;
+}
+
+/**
+ * Report dates of all non-voided closings. Dates only (no financial figures),
+ * so it is safe to expose to the worker closing page for disabling already-closed
+ * days in the date picker.
+ */
+export async function listNonVoidedClosingDates(
+  db: SupabaseClient,
+): Promise<string[]> {
+  const { data, error } = await db
+    .from("daily_closings")
+    .select("report_date")
+    .neq("status", "voided");
+
+  if (error) throw error;
+  return (data ?? []).map((r) => r.report_date as string);
+}
+
 /** Overwrite the stored drawer reconciliation (expected + variance) for a closing. */
 export async function updateDailyClosingReconciliation(
   db: SupabaseClient,

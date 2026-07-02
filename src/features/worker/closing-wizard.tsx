@@ -2,22 +2,29 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { ReviewStatus } from "@/types/inventory";
 import type { DeliveryPlatformLite } from "@/types/delivery";
 import { formatBhd, formatFils } from "@/lib/calculations/currency";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ClosingCalendar } from "@/features/closing/closing-calendar";
 import {
   Check,
   ClipboardList,
   Upload,
   AlertTriangle,
   FileSpreadsheet,
+  CalendarDays,
 } from "lucide-react";
 
-const STEPS = ["EOD Numbers", "Sales by Item", "Cash Count", "Review & Submit"];
+const STEPS = [
+  "Date",
+  "EOD Numbers",
+  "Sales by Item",
+  "Cash Count",
+  "Review & Submit",
+];
 
 // Bahraini cash denominations, in BHD.
 const DENOMS = [20, 10, 5, 1, 0.5, 0.1];
@@ -32,7 +39,8 @@ const DENOM_LABELS: Record<string, string> = {
 
 interface ClosingWizardProps {
   today: string;
-  existingStatus: ReviewStatus | null;
+  /** Dates that already have a non-voided closing — not selectable. */
+  closedDates: string[];
   platforms: DeliveryPlatformLite[];
   /** Current system register cash (fils) — shown for reference during the count. */
   registerCashFils: number;
@@ -58,7 +66,7 @@ interface UploadSummary {
 
 export function ClosingWizard({
   today,
-  existingStatus,
+  closedDates,
   platforms,
   registerCashFils,
 }: ClosingWizardProps) {
@@ -67,6 +75,9 @@ export function ClosingWizard({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+
+  // Default to today; the worker can pick a past day to back-fill a missed one.
+  const [selectedDate, setSelectedDate] = useState<string | null>(today);
 
   const [discount, setDiscount] = useState("");
   const [cashSales, setCashSales] = useState("");
@@ -86,6 +97,11 @@ export function ClosingWizard({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSummary, setUploadSummary] = useState<UploadSummary | null>(null);
+
+  const closedDateSet = new Set(closedDates);
+  const isSelectedClosed =
+    selectedDate !== null && closedDateSet.has(selectedDate);
+  const dateReady = selectedDate !== null && !isSelectedClosed;
 
   function setDeliveryField(
     id: string,
@@ -115,25 +131,6 @@ export function ClosingWizard({
     0,
   );
 
-  if (existingStatus && !done) {
-    const label =
-      existingStatus === "approved"
-        ? "approved by the owner"
-        : "submitted and waiting for owner review";
-    return (
-      <Card>
-        <CardContent>
-          <p className="text-ink text-[15px] font-semibold">
-            Today&apos;s closing is already {label}.
-          </p>
-          <p className="text-ink-3 mt-1 text-sm">
-            Only one closing can be submitted per day.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
   if (done) {
     return (
       <div className="py-10 text-center">
@@ -144,8 +141,8 @@ export function ClosingWizard({
           Daily closing submitted
         </div>
         <p className="text-ink-3 mx-auto mt-2 max-w-sm text-sm">
-          {today} has been sent to the owner for review. The dashboard will
-          update with today&apos;s figures once approved.
+          {selectedDate} has been sent to the owner for review. The dashboard
+          will update with the day&apos;s figures once approved.
         </p>
         <Button
           variant="primary"
@@ -170,14 +167,14 @@ export function ClosingWizard({
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !selectedDate) return;
     setUploading(true);
     setUploadError(null);
 
     const formData = new FormData();
     formData.append("file", file);
     const res = await fetch(
-      `/api/worker/closing/pos-upload?expectedDate=${today}`,
+      `/api/worker/closing/pos-upload?expectedDate=${selectedDate}`,
       { method: "POST", body: formData },
     );
     if (!res.ok) {
@@ -193,6 +190,7 @@ export function ClosingWizard({
   }
 
   async function handleSubmit() {
+    if (!selectedDate) return;
     setError(null);
     setLoading(true);
 
@@ -206,7 +204,7 @@ export function ClosingWizard({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        reportDate: today,
+        reportDate: selectedDate,
         discountBhd: num(discount),
         cashSalesBhd: num(cashSales),
         cashOrders: int(cashOrders),
@@ -259,6 +257,50 @@ export function ClosingWizard({
       </div>
 
       {step === 0 && (
+        <Card>
+          <CardContent>
+            <div className="mb-1 flex items-center gap-2">
+              <CalendarDays size={18} className="text-navy" />
+              <span className="text-ink text-[15px] font-bold">
+                Which day are you closing?
+              </span>
+            </div>
+            <p className="text-ink-3 mb-4 text-sm">
+              Defaults to today. Pick an earlier day to make up a closing that
+              was missed. Days already closed and future days can&apos;t be
+              selected.
+            </p>
+
+            <ClosingCalendar
+              closings={closedDates.map((d) => ({ reportDate: d }))}
+              selectedDate={selectedDate}
+              onSelectDate={setSelectedDate}
+              today={today}
+            />
+
+            <div className="bg-bg text-ink-2 flex items-center justify-between rounded-xl px-4 py-3 text-sm">
+              <span className="font-semibold">Closing date</span>
+              <span className="font-mono font-bold">
+                {selectedDate ?? "— pick a date —"}
+              </span>
+            </div>
+
+            {isSelectedClosed && (
+              <div className="mt-3 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+                <AlertTriangle
+                  size={18}
+                  className="mt-0.5 shrink-0 text-amber-600"
+                />
+                <p className="text-ink-2 text-sm">
+                  This day is already closed. Pick a different day.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {step === 1 && (
         <Card>
           <CardContent>
             <div className="mb-3">
@@ -334,7 +376,7 @@ export function ClosingWizard({
         </Card>
       )}
 
-      {step === 1 && (
+      {step === 2 && (
         <Card>
           <CardContent>
             <div className="mb-1 flex items-center gap-2">
@@ -344,7 +386,7 @@ export function ClosingWizard({
               </span>
             </div>
             <p className="text-ink-3 mb-4 text-sm">
-              Upload today&apos;s Sales By Item XLSX export so inventory usage
+              Upload the day&apos;s Sales By Item XLSX export so inventory usage
               and COGS are recorded. You can skip this and continue.
             </p>
 
@@ -353,7 +395,7 @@ export function ClosingWizard({
                 <Check size={18} className="mt-0.5 shrink-0 text-green-600" />
                 <div className="text-sm">
                   <div className="font-semibold text-green-700">
-                    Uploaded for {uploadSummary.reportDate ?? today}
+                    Uploaded for {uploadSummary.reportDate ?? selectedDate}
                   </div>
                   <p className="text-ink-2 mt-0.5">
                     {uploadSummary.rowCount} items · status{" "}
@@ -371,7 +413,7 @@ export function ClosingWizard({
                     {uploading ? "Uploading..." : "Upload Sales By Item XLSX"}
                   </div>
                   <div className="text-ink-3 mt-1 text-xs">
-                    File date must match {today}
+                    File date must match {selectedDate}
                   </div>
                 </div>
                 <input
@@ -402,7 +444,7 @@ export function ClosingWizard({
         </Card>
       )}
 
-      {step === 2 && (
+      {step === 3 && (
         <>
           <Card>
             <CardContent>
@@ -467,7 +509,7 @@ export function ClosingWizard({
         </>
       )}
 
-      {step === 3 && (
+      {step === 4 && (
         <Card>
           <CardContent>
             <Label htmlFor="notes" className="mb-3 block">
@@ -482,7 +524,7 @@ export function ClosingWizard({
             <div className="mt-5">
               {(
                 [
-                  ["Date", today],
+                  ["Date", selectedDate ?? "—"],
                   ["Total orders", String(totalOrders)],
                   ["Gross sales", `${formatBhd(grossSales)} BHD`],
                   ["Delivery sales", `${formatBhd(deliveryTotal)} BHD`],
@@ -530,8 +572,14 @@ export function ClosingWizard({
             Back
           </Button>
           {step < STEPS.length - 1 ? (
-            <Button variant="primary" size="lg" full onClick={next}>
-              {step === 1 && !uploadSummary ? "Skip / Continue" : "Continue"}
+            <Button
+              variant="primary"
+              size="lg"
+              full
+              onClick={next}
+              disabled={step === 0 && !dateReady}
+            >
+              {step === 2 && !uploadSummary ? "Skip / Continue" : "Continue"}
             </Button>
           ) : (
             <Button
@@ -539,7 +587,7 @@ export function ClosingWizard({
               size="lg"
               full
               onClick={handleSubmit}
-              disabled={loading}
+              disabled={loading || !dateReady}
             >
               <ClipboardList size={18} className="mr-1.5" />
               {loading ? "Submitting..." : "Submit Daily Closing"}

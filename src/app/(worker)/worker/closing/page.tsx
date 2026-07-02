@@ -3,20 +3,23 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireWorker } from "@/lib/auth";
 import {
-  getClosingForDate,
+  getNonVoidedClosingDates,
   getRegisterCashBalance,
 } from "@/services/daily-closing";
 import { getPlatformsForWorker } from "@/services/delivery";
+import { todayInBahrain } from "@/lib/dates";
 import { ClosingWizard } from "@/features/worker/closing-wizard";
 
 export default async function WorkerClosingPage() {
   const db = await createClient();
   await requireWorker(db);
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayInBahrain();
   const admin = createAdminClient();
-  const [existing, platforms, registerCashFils] = await Promise.all([
-    getClosingForDate(db, today),
+  // Dates that already have a closing (any user), so the picker can disable them.
+  // Only dates are read with the admin client — no financial figures.
+  const [closedDates, platforms, registerCashFils] = await Promise.all([
+    getNonVoidedClosingDates(admin),
     getPlatformsForWorker(db),
     getRegisterCashBalance(admin),
   ]);
@@ -37,7 +40,7 @@ export default async function WorkerClosingPage() {
       </p>
       <ClosingWizard
         today={today}
-        existingStatus={existing?.status ?? null}
+        closedDates={closedDates}
         platforms={platforms}
         registerCashFils={registerCashFils}
       />
