@@ -9,6 +9,7 @@ import {
   getClosingForDate,
 } from "@/services/daily-closing";
 import { bhdToFils } from "@/lib/calculations/currency";
+import { toMessage } from "@/lib/errors";
 
 export async function POST(request: NextRequest) {
   const db = await createClient();
@@ -56,7 +57,10 @@ export async function POST(request: NextRequest) {
     );
     return Response.json(result, { status: 201 });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to submit";
-    return Response.json({ error: message }, { status: 400 });
+    console.error("worker closing submit failed", err);
+    return Response.json(
+      { error: toMessage(err, "Failed to submit") },
+      { status: 400 },
+    );
   }
 }

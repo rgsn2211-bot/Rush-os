@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { DeliveryPlatformLite } from "@/types/delivery";
 import { formatBhd } from "@/lib/calculations/currency";
+import { messageFromResponse } from "@/lib/errors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -144,13 +145,10 @@ export function ClosingForm({
           });
 
     if (!res.ok) {
-      let message = mode === "create" ? "Failed to create" : "Failed to save";
+      const fallback = mode === "create" ? "Failed to create" : "Failed to save";
+      let message = fallback;
       try {
-        const data = await res.json();
-        message =
-          typeof data.error === "string"
-            ? data.error
-            : data.error?.formErrors?.[0] || message;
+        message = messageFromResponse(await res.json(), fallback);
       } catch {
         // no JSON body
       }

@@ -6,6 +6,7 @@ import {
   dailyClosingUpdateSchema,
 } from "@/lib/validators/closing";
 import { reviewClosing, updateClosing } from "@/services/daily-closing";
+import { toMessage } from "@/lib/errors";
 
 export async function PATCH(
   request: NextRequest,
@@ -25,8 +26,11 @@ export async function PATCH(
     await reviewClosing(db, id, parsed.data.action, authUser.id);
     return Response.json({ success: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Review failed";
-    return Response.json({ error: message }, { status: 400 });
+    console.error("closing review failed", err);
+    return Response.json(
+      { error: toMessage(err, "Review failed") },
+      { status: 400 },
+    );
   }
 }
 
@@ -49,7 +53,10 @@ export async function PUT(
     const result = await updateClosing(db, id, parsed.data, authUser.id);
     return Response.json(result);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Edit failed";
-    return Response.json({ error: message }, { status: 400 });
+    console.error("closing edit failed", err);
+    return Response.json(
+      { error: toMessage(err, "Edit failed") },
+      { status: 400 },
+    );
   }
 }
