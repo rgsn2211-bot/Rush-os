@@ -7,6 +7,7 @@ import {
   computeExpectedCashFils,
 } from "@/services/daily-closing";
 import { bhdToFils } from "@/lib/calculations/currency";
+import { toMessage } from "@/lib/errors";
 
 /**
  * Owner creates (back-fills) a closing for a chosen date. Saved as needs_review,
@@ -38,7 +39,10 @@ export async function POST(request: NextRequest) {
     );
     return Response.json(result, { status: 201 });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to create";
-    return Response.json({ error: message }, { status: 400 });
+    console.error("owner closing create failed", err);
+    return Response.json(
+      { error: toMessage(err, "Failed to create") },
+      { status: 400 },
+    );
   }
 }

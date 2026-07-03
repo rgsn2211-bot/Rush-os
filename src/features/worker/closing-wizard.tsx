@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { DeliveryPlatformLite } from "@/types/delivery";
 import { formatBhd, formatFils } from "@/lib/calculations/currency";
+import { messageFromResponse } from "@/lib/errors";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -221,11 +222,7 @@ export function ClosingWizard({
     if (!res.ok) {
       let message = "Failed to submit";
       try {
-        const data = await res.json();
-        message =
-          typeof data.error === "string"
-            ? data.error
-            : data.error?.formErrors?.[0] || message;
+        message = messageFromResponse(await res.json(), message);
       } catch {
         // no JSON body
       }
