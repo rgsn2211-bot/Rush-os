@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getProductWithCost } from "@/services/products";
 import { getAllItems } from "@/services/inventory";
+import { getAllProductGroups } from "@/services/product-groups";
 import { PageHeader } from "@/components/ui/page-header";
 import { ProductForm } from "@/features/products/product-form";
 
@@ -18,9 +19,10 @@ export default async function EditProductPage({
   if (!user) redirect("/login");
 
   const { id } = await params;
-  const [product, items] = await Promise.all([
+  const [product, items, groups] = await Promise.all([
     getProductWithCost(db, id),
     getAllItems(db),
+    getAllProductGroups(db),
   ]);
   if (!product) notFound();
 
@@ -38,6 +40,7 @@ export default async function EditProductPage({
       />
       <ProductForm
         inventoryItems={items}
+        groups={groups}
         product={product}
         existingRecipe={product.recipe}
       />

@@ -55,9 +55,16 @@ export const productCreateSchema = z.object({
   category: z.string().trim().optional(),
   priceFils: fils,
   posItemId: z.number().int().positive().optional(),
+  groupId: z.string().uuid().nullable().optional(),
   recipe: z.array(recipeIngredientSchema).default([]),
 });
 export type ProductCreateInput = z.infer<typeof productCreateSchema>;
+
+export const productGroupCreateSchema = z.object({
+  name: z.string().trim().min(1, "Group name is required"),
+  sortOrder: z.number().int().nonnegative().optional(),
+});
+export type ProductGroupCreateInput = z.infer<typeof productGroupCreateSchema>;
 
 export const purchaseItemSchema = z.object({
   inventoryItemId: z.string().uuid(),

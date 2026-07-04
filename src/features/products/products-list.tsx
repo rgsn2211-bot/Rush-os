@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import type { Product } from "@/types/inventory";
+import type { Product, ProductGroup } from "@/types/inventory";
 import { formatFils } from "@/lib/calculations/currency";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,15 +13,21 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 
+type ProductRow = Product & {
+  costFils?: number;
+  marginFils?: number;
+  marginPct?: number;
+};
+
 interface ProductsListProps {
-  products: (Product & {
-    costFils?: number;
-    marginFils?: number;
-    marginPct?: number;
-  })[];
+  products: ProductRow[];
+  groups: ProductGroup[];
 }
 
-export function ProductsList({ products }: ProductsListProps) {
+// Sentinel key for products with no group; sorts after all real groups.
+const UNGROUPED = "__ungrouped__";
+
+export function ProductsList({ products, groups }: ProductsListProps) {
   const router = useRouter();
   const [search, setSearch] = useState("");
 
@@ -31,7 +37,21 @@ export function ProductsList({ products }: ProductsListProps) {
       (p.category?.toLowerCase().includes(search.toLowerCase()) ?? false),
   );
 
-  const columns: Column<ProductsListProps["products"][number]>[] = [
+  // Build the ordered list of sections: each group in sort order, then any
+  // ungrouped products last. Only sections with matching products are shown.
+  const sections: { key: string; name: string; rows: ProductRow[] }[] = [];
+  for (const g of groups) {
+    const rows = filtered.filter((p) => p.groupId === g.id);
+    if (rows.length > 0) sections.push({ key: g.id, name: g.name, rows });
+  }
+  const ungrouped = filtered.filter(
+    (p) => p.groupId == null || !groups.some((g) => g.id === p.groupId),
+  );
+  if (ungrouped.length > 0) {
+    sections.push({ key: UNGROUPED, name: "Ungrouped", rows: ungrouped });
+  }
+
+  const columns: Column<ProductRow>[] = [
     {
       header: "Product",
       cell: (r) => (
@@ -86,11 +106,16 @@ export function ProductsList({ products }: ProductsListProps) {
     <div>
       <PageHeader
         title="Product Costing"
-        subtitle={`${products.length} products · each size/variant is its own product`}
+        subtitle={`${products.length} products · grouped by type`}
         actions={
-          <Link href="/owner/products/new">
-            <Button>Add Product</Button>
-          </Link>
+          <div className="flex gap-2">
+            <Link href="/owner/products/groups">
+              <Button variant="secondary">Manage groups</Button>
+            </Link>
+            <Link href="/owner/products/new">
+              <Button>Add Product</Button>
+            </Link>
+          </div>
         }
       />
 
@@ -103,7 +128,7 @@ export function ProductsList({ products }: ProductsListProps) {
         />
       </div>
 
-      {filtered.length === 0 ? (
+      {sections.length === 0 ? (
         <EmptyState
           message={
             search
@@ -119,13 +144,25 @@ export function ProductsList({ products }: ProductsListProps) {
           }
         />
       ) : (
-        <Card className="p-0">
-          <DataTable
-            columns={columns}
-            rows={filtered}
-            onRowClick={(p) => router.push(`/owner/products/${p.id}`)}
-          />
-        </Card>
+        <div className="flex flex-col gap-6">
+          {sections.map((section) => (
+            <div key={section.key}>
+              <div className="mb-2 flex items-baseline gap-2">
+                <h2 className="text-ink text-sm font-bold">{section.name}</h2>
+                <span className="text-ink-3 text-xs">
+                  {section.rows.length}
+                </span>
+              </div>
+              <Card className="p-0">
+                <DataTable
+                  columns={columns}
+                  rows={section.rows}
+                  onRowClick={(p) => router.push(`/owner/products/${p.id}`)}
+                />
+              </Card>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
