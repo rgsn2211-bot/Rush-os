@@ -49,6 +49,15 @@ export interface InventoryItem {
   updatedAt: string;
 }
 
+/** An owner-managed bucket for organizing products (Menu, Modifiers, ...). */
+export interface ProductGroup {
+  id: string;
+  name: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -56,6 +65,8 @@ export interface Product {
   priceFils: number;
   /** Stable POS "Id" used to map Sales-By-Item rows. */
   posItemId: number | null;
+  /** Organizing group this product belongs to (null = Ungrouped). */
+  groupId: string | null;
   createdAt: string;
   updatedAt: string;
 }

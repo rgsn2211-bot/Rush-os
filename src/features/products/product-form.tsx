@@ -2,7 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { InventoryItem, Product, RecipeIngredient } from "@/types/inventory";
+import type {
+  InventoryItem,
+  Product,
+  ProductGroup,
+  RecipeIngredient,
+} from "@/types/inventory";
 import { formatFils, bhdToFils, filsToBhd } from "@/lib/calculations/currency";
 import { effectiveUnitCostFils } from "@/lib/calculations/costing";
 import { Button } from "@/components/ui/button";
@@ -21,12 +26,14 @@ interface RecipeLine {
 
 interface ProductFormProps {
   inventoryItems: InventoryItem[];
+  groups: ProductGroup[];
   product?: Product;
   existingRecipe?: RecipeIngredient[];
 }
 
 export function ProductForm({
   inventoryItems,
+  groups,
   product,
   existingRecipe,
 }: ProductFormProps) {
@@ -36,6 +43,7 @@ export function ProductForm({
   const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState(product?.name ?? "");
+  const [groupId, setGroupId] = useState(product?.groupId ?? "");
   const [category, setCategory] = useState(product?.category ?? "");
   const [priceBhd, setPriceBhd] = useState(
     product ? String(filsToBhd(product.priceFils)) : "",
@@ -107,6 +115,7 @@ export function ProductForm({
     const body = {
       name: name.trim(),
       category: category.trim() || undefined,
+      groupId: groupId || null,
       priceFils,
       recipe: recipe.map((r) => ({
         inventoryItemId: r.inventoryItemId,
@@ -164,6 +173,21 @@ export function ProductForm({
                     placeholder="e.g. Iced Matcha Latte (Large)"
                     required
                   />
+                </div>
+                <div>
+                  <Label htmlFor="group">Group</Label>
+                  <Select
+                    id="group"
+                    value={groupId}
+                    onChange={(e) => setGroupId(e.target.value)}
+                  >
+                    <option value="">Ungrouped</option>
+                    {groups.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
+                  </Select>
                 </div>
                 <div>
                   <Label htmlFor="category">Category</Label>

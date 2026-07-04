@@ -40,6 +40,7 @@ export async function insertProduct(
       category: input.category ?? null,
       price_fils: input.priceFils,
       pos_item_id: input.posItemId ?? null,
+      group_id: input.groupId ?? null,
     })
     .select("*")
     .single();
@@ -58,6 +59,7 @@ export async function updateProduct(
   if (input.category !== undefined) updates.category = input.category ?? null;
   if (input.priceFils !== undefined) updates.price_fils = input.priceFils;
   if (input.posItemId !== undefined) updates.pos_item_id = input.posItemId ?? null;
+  if (input.groupId !== undefined) updates.group_id = input.groupId ?? null;
 
   const { data, error } = await db
     .from("products")
@@ -133,6 +135,7 @@ function toProduct(row: any): Product {
     category: row.category,
     priceFils: Number(row.price_fils),
     posItemId: row.pos_item_id,
+    groupId: row.group_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

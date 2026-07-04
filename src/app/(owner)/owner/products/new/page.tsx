@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getAllItems } from "@/services/inventory";
+import { getAllProductGroups } from "@/services/product-groups";
 import { PageHeader } from "@/components/ui/page-header";
 import { ProductForm } from "@/features/products/product-form";
 
@@ -10,7 +11,10 @@ export default async function NewProductPage() {
   const { data: { user } } = await db.auth.getUser();
   if (!user) redirect("/login");
 
-  const items = await getAllItems(db);
+  const [items, groups] = await Promise.all([
+    getAllItems(db),
+    getAllProductGroups(db),
+  ]);
 
   return (
     <div>
@@ -24,7 +28,7 @@ export default async function NewProductPage() {
         title="Add Product"
         subtitle="Each size or hot/cold variant is a separate product"
       />
-      <ProductForm inventoryItems={items} />
+      <ProductForm inventoryItems={items} groups={groups} />
     </div>
   );
 }
