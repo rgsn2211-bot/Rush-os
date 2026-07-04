@@ -1,8 +1,13 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getAuthUser } from "@/lib/auth";
 import { workerProductCreateSchema } from "@/lib/validators/inventory";
 import { editWorkerProduct, removeWorkerProduct } from "@/services/products";
+
+// Worker edits/voids run on the admin client so they can touch any (approved) row.
+// Safe: worker-gated route, and the service only writes non-cost product fields +
+// the recipe (which stores qty only). No broad worker RLS write policy is added.
 
 export async function PATCH(
   request: NextRequest,
@@ -23,7 +28,7 @@ export async function PATCH(
   }
 
   try {
-    const product = await editWorkerProduct(db, id, parsed.data);
+    const product = await editWorkerProduct(createAdminClient(), id, parsed.data);
     return Response.json(product);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to update";
@@ -43,6 +48,6 @@ export async function DELETE(
   }
 
   const { id } = await params;
-  await removeWorkerProduct(db, id);
+  await removeWorkerProduct(createAdminClient(), id);
   return new Response(null, { status: 204 });
 }

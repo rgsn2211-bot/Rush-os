@@ -17,7 +17,6 @@ import {
   voidInventoryItem,
   insertWorkerInventoryItem,
   updateWorkerInventoryItem,
-  deleteWorkerInventoryItem,
   listPendingInventoryItems,
   updateInventoryItemReview,
 } from "@/repositories/inventory-items";
@@ -82,12 +81,12 @@ export async function editWorkerItem(
   return updateWorkerInventoryItem(db, id, input);
 }
 
-/** Worker deletes their own still-pending item (RLS enforces own + needs_review). */
+/** Worker deletes any item — soft void (keeps the row + FKs, drops from lists). */
 export async function removeWorkerItem(
   db: SupabaseClient,
   id: string,
 ): Promise<void> {
-  return deleteWorkerInventoryItem(db, id);
+  return voidInventoryItem(db, id);
 }
 
 /** A worker's own item submissions (cost-free), for their index page. */

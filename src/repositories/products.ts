@@ -185,6 +185,32 @@ export async function listPendingProducts(
   }));
 }
 
+/** Re-flag a product for review after a worker edit (no reviewer stamp). */
+export async function markProductNeedsReview(
+  db: SupabaseClient,
+  id: string,
+): Promise<void> {
+  const { error } = await db
+    .from("products")
+    .update({ status: "needs_review" })
+    .eq("id", id);
+
+  if (error) throw error;
+}
+
+/** Soft-delete a product (worker delete). Keeps the row + FKs intact. */
+export async function voidProduct(
+  db: SupabaseClient,
+  id: string,
+): Promise<void> {
+  const { error } = await db
+    .from("products")
+    .update({ status: "voided" })
+    .eq("id", id);
+
+  if (error) throw error;
+}
+
 /** Owner review action: flip status and stamp who/when. */
 export async function updateProductReview(
   db: SupabaseClient,

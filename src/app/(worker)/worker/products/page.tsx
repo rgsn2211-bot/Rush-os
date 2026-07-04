@@ -1,17 +1,17 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireWorker } from "@/lib/auth";
-import { getMyProducts } from "@/services/products";
+import { getAllProducts } from "@/services/products";
 import { getAllProductGroups } from "@/services/product-groups";
 import { formatFils } from "@/lib/calculations/currency";
 import { WorkerSubmissions } from "@/features/worker/worker-submissions";
 
 export default async function WorkerProductsPage() {
   const db = await createClient();
-  const authUser = await requireWorker(db);
+  await requireWorker(db);
 
   const [products, groups] = await Promise.all([
-    getMyProducts(db, authUser.id),
+    getAllProducts(db),
     getAllProductGroups(db),
   ]);
   const groupName = new Map(groups.map((g) => [g.id, g.name]));
@@ -39,7 +39,8 @@ export default async function WorkerProductsPage() {
         </Link>
         <h1 className="text-ink text-xl font-bold">Products</h1>
         <p className="text-ink-3 mt-1 text-[14px]">
-          Products you&apos;ve created. Usable right away; the owner reviews them.
+          Tap any product to edit it. Changes are usable right away and the owner
+          reviews them.
         </p>
       </div>
       <WorkerSubmissions
@@ -48,7 +49,7 @@ export default async function WorkerProductsPage() {
         apiBase="/api/worker/products"
         addHref="/worker/products/new"
         addLabel="Create Product"
-        emptyText="You haven't created any products yet."
+        emptyText="No products yet."
       />
     </div>
   );

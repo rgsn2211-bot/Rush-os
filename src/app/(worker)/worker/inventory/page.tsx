@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireWorker } from "@/lib/auth";
-import { getMyItems } from "@/services/inventory";
+import { listInventoryItemsOps } from "@/repositories/worker-inventory";
 import { WorkerSubmissions } from "@/features/worker/worker-submissions";
 
 export default async function WorkerInventoryPage() {
   const db = await createClient();
-  const authUser = await requireWorker(db);
-  const items = await getMyItems(db, authUser.id);
+  await requireWorker(db);
+  const items = await listInventoryItemsOps(db);
 
   const rows = items.map((i) => ({
     id: i.id,
@@ -29,7 +29,7 @@ export default async function WorkerInventoryPage() {
         </Link>
         <h1 className="text-ink text-xl font-bold">Inventory Items</h1>
         <p className="text-ink-3 mt-1 text-[14px]">
-          Items you&apos;ve added. New ones are usable right away; the owner
+          Tap any item to edit it. Changes are usable right away and the owner
           reviews them.
         </p>
       </div>
@@ -39,7 +39,7 @@ export default async function WorkerInventoryPage() {
         apiBase="/api/worker/inventory"
         addHref="/worker/inventory/new"
         addLabel="Add Item"
-        emptyText="You haven't added any items yet."
+        emptyText="No inventory items yet."
       />
     </div>
   );

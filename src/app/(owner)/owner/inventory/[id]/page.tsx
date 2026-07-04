@@ -46,6 +46,8 @@ export default async function InventoryItemPage({
             itemId={item.id}
             baseUnit={item.baseUnit}
             submitterName={null}
+            initialCostFils={item.defaultCostFils}
+            initialCostingMethod={item.costingMethod}
           />
         </div>
       )}

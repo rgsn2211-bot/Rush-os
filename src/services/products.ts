@@ -20,6 +20,8 @@ import {
   listPendingProducts,
   updateProductReview,
   listMyProducts,
+  markProductNeedsReview,
+  voidProduct,
 } from "@/repositories/products";
 import { listInventoryItems } from "@/repositories/inventory-items";
 import { listInventoryItemsOps } from "@/repositories/worker-inventory";
@@ -171,7 +173,12 @@ export async function createWorkerProduct(
   return product;
 }
 
-/** Worker edits their own still-pending product (RLS enforces own + needs_review). */
+/**
+ * Worker edits any product. The change applies immediately and re-flags the
+ * product for owner review. Runs on an admin client (see the API route) so a
+ * worker can edit approved products without a broad worker RLS write policy —
+ * the app only ever writes non-cost fields + the recipe.
+ */
 export async function editWorkerProduct(
   db: SupabaseClient,
   id: string,
@@ -186,15 +193,16 @@ export async function editWorkerProduct(
     priceFils: input.priceFils,
   });
   await setRecipeIngredients(db, id, input.recipe);
+  await markProductNeedsReview(db, id);
   return product;
 }
 
-/** Worker deletes their own still-pending product (RLS enforces own + needs_review). */
+/** Worker deletes any product — soft void (keeps the row + FKs, POS skips voided). */
 export async function removeWorkerProduct(
   db: SupabaseClient,
   id: string,
 ): Promise<void> {
-  return deleteProduct(db, id);
+  return voidProduct(db, id);
 }
 
 /** A worker's own product submissions, for their index page. */
