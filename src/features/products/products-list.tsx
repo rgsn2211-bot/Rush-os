@@ -56,7 +56,12 @@ export function ProductsList({ products, groups }: ProductsListProps) {
       header: "Product",
       cell: (r) => (
         <div>
-          <div className="font-semibold">{r.name}</div>
+          <div className="flex items-center gap-2">
+            <span className="font-semibold">{r.name}</span>
+            {r.status === "needs_review" && (
+              <Badge variant="amber">Needs review</Badge>
+            )}
+          </div>
           {r.category && (
             <div className="text-ink-3 mt-0.5 text-xs">{r.category}</div>
           )}

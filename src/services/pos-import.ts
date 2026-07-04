@@ -16,7 +16,7 @@ import {
 import {
   upsertPosItemCatalog,
 } from "@/repositories/pos-catalog";
-import { getRecipeIngredients } from "@/repositories/products";
+import { getRecipeIngredients, getProduct } from "@/repositories/products";
 import { getInventoryItem, adjustStock } from "@/repositories/inventory-items";
 import { consumeStock } from "@/lib/calculations/costing";
 
@@ -186,6 +186,11 @@ export async function processImportInventory(
   const aggregatedUsage = new Map<string, number>();
 
   for (const row of mappedRows) {
+    // Safeguard: a product the owner rejected (voided) must never deduct stock,
+    // even if it was previously mapped to this POS line.
+    const product = await getProduct(db, row.productId!);
+    if (product && product.status === "voided") continue;
+
     const recipe = await getRecipeIngredients(db, row.productId!);
     for (const ing of recipe) {
       const key = ing.inventoryItemId;

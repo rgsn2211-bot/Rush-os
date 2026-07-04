@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ProductReviewCard } from "@/features/reviews/product-review-card";
 
 export default async function ProductDetailPage({
   params,
@@ -40,6 +41,12 @@ export default async function ProductDetailPage({
       >
         &larr; Back to products
       </Link>
+
+      {product.status === "needs_review" && (
+        <div className="mb-4">
+          <ProductReviewCard productId={product.id} submitterName={null} />
+        </div>
+      )}
 
       <PageHeader
         title={product.name}

@@ -17,6 +17,8 @@ import {
   Banknote,
   ClipboardList,
   Gift,
+  Boxes,
+  Coffee,
 } from "lucide-react";
 
 function greeting(): string {
@@ -50,6 +52,18 @@ export default async function WorkerHome() {
       desc: "Delivery or purchase received",
       icon: Package,
       href: "/worker/receive",
+    },
+    {
+      label: "Inventory Items",
+      desc: "Add & manage stock items",
+      icon: Boxes,
+      href: "/worker/inventory",
+    },
+    {
+      label: "Products",
+      desc: "Create drinks, modifiers & more",
+      icon: Coffee,
+      href: "/worker/products",
     },
     {
       label: "Log Complimentary",

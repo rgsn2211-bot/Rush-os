@@ -45,6 +45,32 @@ export type InventoryItemCreateInput = z.infer<
   typeof inventoryItemCreateSchema
 >;
 
+/**
+ * Worker-facing item schema: identical to the owner schema but WITHOUT the cost
+ * fields (defaultCostFils / costingMethod). Workers never set cost — the columns
+ * keep their DB defaults until the owner fills in the real cost on approval.
+ */
+export const workerInventoryItemCreateSchema = z.object({
+  name: z.string().trim().min(1, "Item name is required"),
+  category: z.string().trim().optional(),
+  baseUnit: z.string().trim().min(1, "Base unit is required"),
+  stockUnit: z.string().trim().min(1, "Stock unit is required"),
+  basePerStock: positive.default(1),
+  purchaseUnit: z.string().trim().min(1, "Purchase unit is required"),
+  unitsPerPurchase: positive,
+  expiry: expiryModeSchema.default("not_needed"),
+  tracksOpen: z.boolean().default(false),
+  shelfLifeDays: z.number().int().nonnegative().optional(),
+  openLifeDays: z.number().int().nonnegative().optional(),
+  minBaseQty: z.number().nonnegative().default(0),
+  maxBaseQty: z.number().nonnegative().optional(),
+  safetyDays: z.number().int().nonnegative().default(0),
+  supplierId: z.string().uuid().optional(),
+});
+export type WorkerInventoryItemCreateInput = z.infer<
+  typeof workerInventoryItemCreateSchema
+>;
+
 export const recipeIngredientSchema = z.object({
   inventoryItemId: z.string().uuid(),
   qtyBase: positive,
@@ -65,6 +91,40 @@ export const productGroupCreateSchema = z.object({
   sortOrder: z.number().int().nonnegative().optional(),
 });
 export type ProductGroupCreateInput = z.infer<typeof productGroupCreateSchema>;
+
+/**
+ * Worker-facing product schema: name, group, price and a recipe. No cost/margin
+ * is ever computed or shown for workers. Price defaults to 0 so packaging/training/
+ * staff products (which aren't sold) can be logged without a selling price.
+ */
+export const workerProductCreateSchema = z.object({
+  name: z.string().trim().min(1, "Product name is required"),
+  category: z.string().trim().optional(),
+  groupId: z.string().uuid().nullable().optional(),
+  priceFils: fils.default(0),
+  recipe: z.array(recipeIngredientSchema).min(1, "Add at least one ingredient"),
+});
+export type WorkerProductCreateInput = z.infer<typeof workerProductCreateSchema>;
+
+/**
+ * Owner review of a worker-authored item. Approving an item requires the cost the
+ * worker never set (a per-base-unit rate, can be sub-fil); rejecting needs nothing.
+ */
+export const inventoryItemReviewSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("approve"),
+    defaultCostFils: z.number().nonnegative().default(0),
+    costingMethod: costingMethodSchema.default("weighted_average"),
+  }),
+  z.object({ action: z.literal("reject") }),
+]);
+export type InventoryItemReviewInput = z.infer<typeof inventoryItemReviewSchema>;
+
+/** Owner review of a worker-authored product (no cost — approving just confirms it). */
+export const productReviewSchema = z.object({
+  action: z.enum(["approve", "reject"]),
+});
+export type ProductReviewInput = z.infer<typeof productReviewSchema>;
 
 export const purchaseItemSchema = z.object({
   inventoryItemId: z.string().uuid(),

@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ItemReviewCard } from "@/features/reviews/item-review-card";
 
 export default async function InventoryItemPage({
   params,
@@ -38,6 +39,16 @@ export default async function InventoryItemPage({
       >
         &larr; Back to inventory
       </Link>
+
+      {item.status === "needs_review" && (
+        <div className="mb-4">
+          <ItemReviewCard
+            itemId={item.id}
+            baseUnit={item.baseUnit}
+            submitterName={null}
+          />
+        </div>
+      )}
 
       <PageHeader
         title={item.name}
