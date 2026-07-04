@@ -77,6 +77,9 @@ export function InventoryList({ items }: InventoryListProps) {
     {
       header: "Status",
       cell: (r) => {
+        if (r.status === "needs_review") {
+          return <Badge variant="amber">Needs review</Badge>;
+        }
         if (r.stockBaseQty <= r.minBaseQty && r.minBaseQty > 0) {
           return <Badge variant="red">Low</Badge>;
         }

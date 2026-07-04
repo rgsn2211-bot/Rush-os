@@ -1,5 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Product, RecipeIngredient } from "@/types/inventory";
+import type {
+  Product,
+  ProductWithSubmitter,
+  RecipeIngredient,
+  ReviewStatus,
+} from "@/types/inventory";
 import type { ProductCreateInput } from "@/lib/validators/inventory";
 
 export async function listProducts(
@@ -8,7 +13,24 @@ export async function listProducts(
   const { data, error } = await db
     .from("products")
     .select("*")
+    .neq("status", "voided")
     .order("name");
+
+  if (error) throw error;
+  return data.map(toProduct);
+}
+
+/** A worker's own products (any status except voided), newest first. */
+export async function listMyProducts(
+  db: SupabaseClient,
+  createdBy: string,
+): Promise<Product[]> {
+  const { data, error } = await db
+    .from("products")
+    .select("*")
+    .eq("created_by", createdBy)
+    .neq("status", "voided")
+    .order("created_at", { ascending: false });
 
   if (error) throw error;
   return data.map(toProduct);
@@ -32,6 +54,7 @@ export async function getProduct(
 export async function insertProduct(
   db: SupabaseClient,
   input: ProductCreateInput,
+  opts?: { status?: ReviewStatus; createdBy?: string },
 ): Promise<Product> {
   const { data, error } = await db
     .from("products")
@@ -41,6 +64,9 @@ export async function insertProduct(
       price_fils: input.priceFils,
       pos_item_id: input.posItemId ?? null,
       group_id: input.groupId ?? null,
+      // Owner path omits these → DB defaults (status 'approved', created_by null).
+      ...(opts?.status ? { status: opts.status } : {}),
+      ...(opts?.createdBy ? { created_by: opts.createdBy } : {}),
     })
     .select("*")
     .single();
@@ -127,6 +153,56 @@ export async function setRecipeIngredients(
   return data.map(toRecipeIngredient);
 }
 
+/** Products awaiting owner review, newest first, with the submitter's name. */
+export async function listPendingProducts(
+  db: SupabaseClient,
+): Promise<ProductWithSubmitter[]> {
+  const { data, error } = await db
+    .from("products")
+    .select("*")
+    .eq("status", "needs_review")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  const products = data.map(toProduct);
+
+  // Resolve submitter names via a batched profiles lookup (mirrors waste repo).
+  const creatorIds = [
+    ...new Set(products.map((p) => p.createdBy).filter(Boolean)),
+  ] as string[];
+  const nameMap = new Map<string, string>();
+  if (creatorIds.length > 0) {
+    const { data: profiles } = await db
+      .from("profiles")
+      .select("id, display_name")
+      .in("id", creatorIds);
+    if (profiles) for (const p of profiles) nameMap.set(p.id, p.display_name);
+  }
+
+  return products.map((p) => ({
+    ...p,
+    submitterName: (p.createdBy && nameMap.get(p.createdBy)) ?? null,
+  }));
+}
+
+/** Owner review action: flip status and stamp who/when. */
+export async function updateProductReview(
+  db: SupabaseClient,
+  id: string,
+  status: ReviewStatus,
+  reviewedBy: string,
+): Promise<Product> {
+  const { data, error } = await db
+    .from("products")
+    .update({ status, reviewed_by: reviewedBy, reviewed_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return toProduct(data);
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toProduct(row: any): Product {
   return {
@@ -136,6 +212,8 @@ function toProduct(row: any): Product {
     priceFils: Number(row.price_fils),
     posItemId: row.pos_item_id,
     groupId: row.group_id ?? null,
+    status: row.status,
+    createdBy: row.created_by ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

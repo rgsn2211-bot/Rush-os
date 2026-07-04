@@ -45,6 +45,7 @@ export interface InventoryItem {
   defaultCostFils: number;
   costingMethod: CostingMethod;
   status: ReviewStatus;
+  createdBy: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -67,8 +68,22 @@ export interface Product {
   posItemId: number | null;
   /** Organizing group this product belongs to (null = Ungrouped). */
   groupId: string | null;
+  /** Review state. Worker-created products start 'needs_review'. */
+  status: ReviewStatus;
+  /** The user (worker) who created it, when self-authored. */
+  createdBy: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** A product awaiting owner review, enriched with the submitter's name. */
+export interface ProductWithSubmitter extends Product {
+  submitterName: string | null;
+}
+
+/** An inventory item awaiting owner review, enriched with the submitter's name. */
+export interface InventoryItemWithSubmitter extends InventoryItem {
+  submitterName: string | null;
 }
 
 export interface RecipeIngredient {
@@ -129,6 +144,8 @@ export interface InventoryItemOps {
   supplierId: string | null;
   stockBaseQty: number;
   status: ReviewStatus;
+  /** The user (worker) who created it — used to list a worker's own submissions. */
+  createdBy: string | null;
   createdAt: string;
 }
 
