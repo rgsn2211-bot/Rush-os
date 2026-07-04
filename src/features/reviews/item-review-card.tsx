@@ -2,31 +2,39 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { bhdRateToFils } from "@/lib/calculations/currency";
+import { bhdRateToFils, filsToBhd } from "@/lib/calculations/currency";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import type { CostingMethod } from "@/types/inventory";
 
 /**
- * Owner review card for a worker-created inventory item. Approving requires the
- * cost the worker never set (a per-base-unit rate); rejecting voids the item.
+ * Owner review card for a worker-authored inventory item. Approving sets the cost
+ * the worker never touches (a per-base-unit rate); rejecting voids the item. For an
+ * item the worker *edited* (already had a cost), the fields pre-fill with the
+ * current cost so re-approving never resets it.
  */
 export function ItemReviewCard({
   itemId,
   baseUnit,
   submitterName,
+  initialCostFils = 0,
+  initialCostingMethod = "weighted_average",
 }: {
   itemId: string;
   baseUnit: string;
   submitterName: string | null;
+  initialCostFils?: number;
+  initialCostingMethod?: CostingMethod;
 }) {
   const router = useRouter();
-  const [costBhd, setCostBhd] = useState("");
-  const [costingMethod, setCostingMethod] = useState<
-    "weighted_average" | "fixed"
-  >("weighted_average");
+  const [costBhd, setCostBhd] = useState(
+    initialCostFils > 0 ? String(filsToBhd(initialCostFils)) : "",
+  );
+  const [costingMethod, setCostingMethod] =
+    useState<CostingMethod>(initialCostingMethod);
   const [loading, setLoading] = useState<null | "approve" | "reject">(null);
   const [error, setError] = useState<string | null>(null);
 

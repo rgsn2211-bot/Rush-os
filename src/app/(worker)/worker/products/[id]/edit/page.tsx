@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { requireWorker } from "@/lib/auth";
 import { getWorkerProductForEdit } from "@/services/products";
 import { getAllProductGroups } from "@/services/product-groups";
@@ -16,8 +17,10 @@ export default async function EditWorkerProductPage({
   await requireWorker(db);
 
   const { id } = await params;
+  // Admin read so the recipe loads for products the worker didn't create
+  // (recipe_ingredients holds qty only — no cost data).
   const [loaded, items, groups] = await Promise.all([
-    getWorkerProductForEdit(db, id),
+    getWorkerProductForEdit(createAdminClient(), id),
     listInventoryItemsOps(db),
     getAllProductGroups(db),
   ]);
@@ -34,7 +37,7 @@ export default async function EditWorkerProductPage({
         </Link>
         <h1 className="text-ink text-xl font-bold">Edit {loaded.product.name}</h1>
         <p className="text-ink-3 mt-1 text-[14px]">
-          You can edit this while it&apos;s still pending review.
+          Changes are usable right away and the owner reviews them.
         </p>
       </div>
       <WorkerProductForm

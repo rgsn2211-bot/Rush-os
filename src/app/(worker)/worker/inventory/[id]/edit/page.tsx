@@ -32,7 +32,7 @@ export default async function EditWorkerItemPage({
         </Link>
         <h1 className="text-ink text-xl font-bold">Edit {item.name}</h1>
         <p className="text-ink-3 mt-1 text-[14px]">
-          You can edit this while it&apos;s still pending review.
+          Changes are usable right away and the owner reviews them.
         </p>
       </div>
       <WorkerItemForm suppliers={suppliers} item={item} />

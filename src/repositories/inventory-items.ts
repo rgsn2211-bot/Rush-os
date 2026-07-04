@@ -163,6 +163,8 @@ export async function updateWorkerInventoryItem(
   if (input.maxBaseQty !== undefined) updates.max_base_qty = input.maxBaseQty ?? null;
   if (input.safetyDays !== undefined) updates.safety_days = input.safetyDays;
   if (input.supplierId !== undefined) updates.supplier_id = input.supplierId ?? null;
+  // Any worker edit re-flags the row for owner review (cost is untouched).
+  updates.status = "needs_review";
 
   const { error } = await db
     .from("inventory_items")
