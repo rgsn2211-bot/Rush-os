@@ -10,10 +10,13 @@ export interface InsertPurchaseInput {
   supplierId: string | null;
   purchasedOn: string;
   isPaid: boolean;
+  paidMethod?: "cash" | "bank" | null;
+  paidOn?: string | null;
   dueDate: string | null;
   totalFils: number;
   createdBy: string;
   status?: ReviewStatus;
+  receivedOn?: string | null;
 }
 
 export interface InsertPurchaseItemInput {
@@ -148,10 +151,13 @@ export async function insertPurchase(
       supplier_id: input.supplierId,
       purchased_on: input.purchasedOn,
       is_paid: input.isPaid,
+      ...(input.paidMethod !== undefined ? { paid_method: input.paidMethod } : {}),
+      ...(input.paidOn !== undefined ? { paid_on: input.paidOn } : {}),
       due_date: input.dueDate,
       total_fils: input.totalFils,
       created_by: input.createdBy,
       ...(input.status ? { status: input.status } : {}),
+      ...(input.receivedOn !== undefined ? { received_on: input.receivedOn } : {}),
     })
     .select("*")
     .single();
@@ -199,26 +205,71 @@ export async function approvePurchaseRecord(
   db: SupabaseClient,
   id: string,
   totalFils: number,
+  receivedOn: string,
 ): Promise<void> {
   const { error } = await db
     .from("purchases")
-    .update({ status: "approved", total_fils: totalFils })
+    .update({ status: "approved", total_fils: totalFils, received_on: receivedOn })
     .eq("id", id);
 
   if (error) throw error;
 }
 
-/** Mark an unpaid purchase as paid (closes the payable). */
+/**
+ * Move a purchase to a new lifecycle status (e.g. worker receipt
+ * ordered -> needs_review). Optionally stamps received_on when it lands.
+ */
+export async function updatePurchaseStatus(
+  db: SupabaseClient,
+  id: string,
+  status: ReviewStatus,
+  receivedOn?: string,
+): Promise<void> {
+  const patch: Record<string, unknown> = { status };
+  if (receivedOn !== undefined) patch.received_on = receivedOn;
+  const { error } = await db.from("purchases").update(patch).eq("id", id);
+  if (error) throw error;
+}
+
+/** Mark an unpaid purchase as paid (closes the payable), stamping the pay date. */
 export async function markPurchasePaid(
   db: SupabaseClient,
   id: string,
   paidMethod: "cash" | "bank",
+  paidOn: string,
 ): Promise<void> {
   const { error } = await db
     .from("purchases")
-    .update({ is_paid: true, paid_method: paidMethod })
+    .update({ is_paid: true, paid_method: paidMethod, paid_on: paidOn })
     .eq("id", id);
 
+  if (error) throw error;
+}
+
+/** Overwrite a purchase line's received quantity and (optional) cost/total. */
+export async function updatePurchaseItemReceived(
+  db: SupabaseClient,
+  purchaseItemId: string,
+  patch: {
+    purchaseQty?: number;
+    baseQty?: number;
+    unitCostFils?: number;
+    lineTotalFils?: number;
+    expiryDate?: string | null;
+  },
+): Promise<void> {
+  const update: Record<string, unknown> = {};
+  if (patch.purchaseQty !== undefined) update.purchase_qty = patch.purchaseQty;
+  if (patch.baseQty !== undefined) update.base_qty = patch.baseQty;
+  if (patch.unitCostFils !== undefined) update.unit_cost_fils = patch.unitCostFils;
+  if (patch.lineTotalFils !== undefined) update.line_total_fils = patch.lineTotalFils;
+  if (patch.expiryDate !== undefined) update.expiry_date = patch.expiryDate;
+  if (Object.keys(update).length === 0) return;
+
+  const { error } = await db
+    .from("purchase_items")
+    .update(update)
+    .eq("id", purchaseItemId);
   if (error) throw error;
 }
 
@@ -280,10 +331,12 @@ function toPurchase(row: any): Purchase {
     purchasedOn: row.purchased_on,
     isPaid: row.is_paid,
     paidMethod: row.paid_method ?? null,
+    paidOn: row.paid_on ?? null,
     dueDate: row.due_date,
     totalFils: Number(row.total_fils),
     imagePath: row.image_path,
     status: row.status,
+    receivedOn: row.received_on ?? null,
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

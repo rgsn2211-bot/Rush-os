@@ -31,6 +31,23 @@ export type RecurringCostCreateInput = z.infer<
   typeof recurringCostCreateSchema
 >;
 
+/**
+ * Mark a recurring cost paid, optionally covering several upcoming periods at
+ * once (rent paid a quarter ahead, etc.). N periods deduct N × amount now and
+ * advance the next due date by N steps. Only Weekly/Monthly can exceed 1.
+ */
+export const recurringPaySchema = z.object({
+  periods: z.number().int().min(1).max(60).default(1),
+});
+export type RecurringPayInput = z.infer<typeof recurringPaySchema>;
+
+/** Owner-only payment of a purchase (payable, prepay, or one-shot). */
+export const purchasePaySchema = z.object({
+  paidMethod: z.enum(["cash", "bank"]),
+  paidOn: dateStr.optional(),
+});
+export type PurchasePayInput = z.infer<typeof purchasePaySchema>;
+
 export const settlementCreateSchema = z.object({
   channel: z.enum(["card", "benefitpay", "delivery"]),
   platform: z.string().trim().optional(),

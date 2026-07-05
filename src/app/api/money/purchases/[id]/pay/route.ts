@@ -1,12 +1,8 @@
 import { NextRequest } from "next/server";
-import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireOwner } from "@/lib/auth";
 import { payPurchase } from "@/services/money";
-
-const paySchema = z.object({
-  paidMethod: z.enum(["cash", "bank"]),
-});
+import { purchasePaySchema } from "@/lib/validators/money";
 
 export async function POST(
   request: NextRequest,
@@ -17,13 +13,13 @@ export async function POST(
   const { id } = await params;
 
   const body = await request.json();
-  const parsed = paySchema.safeParse(body);
+  const parsed = purchasePaySchema.safeParse(body);
   if (!parsed.success) {
     return Response.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
   try {
-    await payPurchase(db, id, parsed.data.paidMethod, authUser.id);
+    await payPurchase(db, id, parsed.data, authUser.id);
     return Response.json({ success: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to mark paid";

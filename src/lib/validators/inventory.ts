@@ -172,3 +172,39 @@ export const purchaseApproveSchema = z.object({
     .min(1, "Cost entries are required"),
 });
 export type PurchaseApproveInput = z.infer<typeof purchaseApproveSchema>;
+
+/**
+ * Placing an order (owner OR worker): expected qty and optional expected cost.
+ * Touches no stock and no cash — it becomes status 'ordered'. Payment is never
+ * set here.
+ */
+export const purchaseOrderItemSchema = z.object({
+  inventoryItemId: z.string().uuid(),
+  purchaseQty: positive,
+  unitCostFils: fils.default(0),
+  expiryDate: z.string().date().optional(),
+});
+
+export const purchaseOrderCreateSchema = z.object({
+  supplierId: z.string().uuid().optional(),
+  purchasedOn: z.string().date().optional(),
+  items: z.array(purchaseOrderItemSchema).min(1, "Add at least one item"),
+});
+export type PurchaseOrderCreateInput = z.infer<typeof purchaseOrderCreateSchema>;
+
+/**
+ * Receiving an order (all-or-nothing): the actual quantity that arrived
+ * overwrites the draft. Owner receipts carry the final unit cost and
+ * auto-approve; worker receipts omit cost and go to Owner Review.
+ */
+export const purchaseReceiveItemSchema = z.object({
+  purchaseItemId: z.string().uuid(),
+  purchaseQty: positive,
+  unitCostFils: fils.optional(),
+  expiryDate: z.string().date().optional(),
+});
+
+export const purchaseReceiveSchema = z.object({
+  items: z.array(purchaseReceiveItemSchema).min(1, "Add at least one item"),
+});
+export type PurchaseReceiveInput = z.infer<typeof purchaseReceiveSchema>;

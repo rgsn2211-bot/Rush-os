@@ -9,7 +9,7 @@
 
 export type ExpiryMode = "required" | "optional" | "not_needed";
 export type CostingMethod = "weighted_average" | "fixed";
-export type ReviewStatus = "approved" | "needs_review" | "voided";
+export type ReviewStatus = "ordered" | "approved" | "needs_review" | "voided";
 export type UserRole = "owner" | "worker";
 
 export interface Supplier {
@@ -99,16 +99,49 @@ export type PaidMethod = "cash" | "bank";
 export interface Purchase {
   id: string;
   supplierId: string | null;
+  /** When the order was placed (also the default receive/pay date). */
   purchasedOn: string;
   isPaid: boolean;
   paidMethod: PaidMethod | null;
+  /** When the payment actually posted to the cash ledger. Null until paid. */
+  paidOn: string | null;
   dueDate: string | null;
   totalFils: number;
   imagePath: string | null;
+  /** ordered → needs_review → approved (stock lands on approved), or voided. */
   status: ReviewStatus;
+  /** When stock landed (status became approved). Null until received. */
+  receivedOn: string | null;
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Cost-free view of a purchase — what workers see (incoming orders + receipts).
+ * Never exposes money: no total, no unit costs, no paid method/date.
+ */
+export interface PurchaseOps {
+  id: string;
+  supplierId: string | null;
+  purchasedOn: string;
+  isPaid: boolean;
+  dueDate: string | null;
+  status: ReviewStatus;
+  receivedOn: string | null;
+  createdBy: string | null;
+  createdAt: string;
+}
+
+/** Cost-free view of a purchase line — quantities only, no costs. */
+export interface PurchaseItemOps {
+  id: string;
+  purchaseId: string;
+  inventoryItemId: string;
+  purchaseQty: number;
+  baseQty: number;
+  expiryDate: string | null;
+  createdAt: string;
 }
 
 export interface PurchaseItem {
