@@ -54,6 +54,12 @@ export default async function WorkerHome() {
       href: "/worker/receive",
     },
     {
+      label: "Orders",
+      desc: "Place & receive incoming deliveries",
+      icon: ClipboardList,
+      href: "/worker/orders",
+    },
+    {
       label: "Inventory Items",
       desc: "Add & manage stock items",
       icon: Boxes,
