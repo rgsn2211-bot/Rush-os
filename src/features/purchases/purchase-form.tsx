@@ -33,6 +33,7 @@ export function PurchaseForm({ inventoryItems, suppliers }: PurchaseFormProps) {
   const [error, setError] = useState<string | null>(null);
 
   const today = new Date().toISOString().split("T")[0];
+  const [mode, setMode] = useState<"receive" | "order">("receive");
   const [supplierId, setSupplierId] = useState("");
   const [purchasedOn, setPurchasedOn] = useState(today);
   const [isPaid, setIsPaid] = useState(true);
@@ -40,6 +41,8 @@ export function PurchaseForm({ inventoryItems, suppliers }: PurchaseFormProps) {
   const [dueDate, setDueDate] = useState("");
   const [lines, setLines] = useState<PurchaseLine[]>([]);
   const [showItemPicker, setShowItemPicker] = useState(false);
+
+  const isOrder = mode === "order";
 
   function lineTotalFils(line: PurchaseLine): number {
     return Math.round(line.purchaseQty * bhdToFils(Number(line.unitCostBhd) || 0));
@@ -78,26 +81,36 @@ export function PurchaseForm({ inventoryItems, suppliers }: PurchaseFormProps) {
     setError(null);
 
     if (lines.length === 0) {
-      setError("Add at least one item to receive.");
+      setError(isOrder ? "Add at least one item to order." : "Add at least one item to receive.");
       return;
     }
 
     setLoading(true);
 
-    const body = {
-      supplierId: supplierId || undefined,
-      purchasedOn: purchasedOn || undefined,
-      isPaid,
-      paidMethod: isPaid ? paidMethod : undefined,
-      dueDate: !isPaid && dueDate ? dueDate : undefined,
-      items: lines.map((l) => ({
-        inventoryItemId: l.inventoryItemId,
-        purchaseQty: l.purchaseQty,
-        unitCostFils: bhdToFils(Number(l.unitCostBhd) || 0),
-      })),
-    };
+    const body = isOrder
+      ? {
+          supplierId: supplierId || undefined,
+          purchasedOn: purchasedOn || undefined,
+          items: lines.map((l) => ({
+            inventoryItemId: l.inventoryItemId,
+            purchaseQty: l.purchaseQty,
+            unitCostFils: bhdToFils(Number(l.unitCostBhd) || 0),
+          })),
+        }
+      : {
+          supplierId: supplierId || undefined,
+          purchasedOn: purchasedOn || undefined,
+          isPaid,
+          paidMethod: isPaid ? paidMethod : undefined,
+          dueDate: !isPaid && dueDate ? dueDate : undefined,
+          items: lines.map((l) => ({
+            inventoryItemId: l.inventoryItemId,
+            purchaseQty: l.purchaseQty,
+            unitCostFils: bhdToFils(Number(l.unitCostBhd) || 0),
+          })),
+        };
 
-    const res = await fetch("/api/purchases", {
+    const res = await fetch(isOrder ? "/api/purchases/order" : "/api/purchases", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -119,6 +132,34 @@ export function PurchaseForm({ inventoryItems, suppliers }: PurchaseFormProps) {
 
   return (
     <form onSubmit={handleSubmit}>
+      {/* Order vs one-shot receive */}
+      <div className="mb-5 grid grid-cols-2 gap-3">
+        <button
+          type="button"
+          onClick={() => setMode("receive")}
+          className={`rounded-xl border-2 p-3.5 text-left transition-colors ${
+            !isOrder ? "border-navy bg-navy/5" : "border-line bg-white"
+          }`}
+        >
+          <div className="text-navy text-sm font-bold">Receive now</div>
+          <div className="text-ink-3 text-xs">
+            Goods in hand — lands stock immediately (and pays, if you choose)
+          </div>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("order")}
+          className={`rounded-xl border-2 p-3.5 text-left transition-colors ${
+            isOrder ? "border-navy bg-navy/5" : "border-line bg-white"
+          }`}
+        >
+          <div className="text-navy text-sm font-bold">Place order</div>
+          <div className="text-ink-3 text-xs">
+            Expected delivery — no stock or cash until it arrives
+          </div>
+        </button>
+      </div>
+
       <div className="grid items-start gap-5 lg:grid-cols-[1.5fr_1fr]">
         <div className="flex flex-col gap-4">
           {/* Purchase details */}
@@ -154,6 +195,8 @@ export function PurchaseForm({ inventoryItems, suppliers }: PurchaseFormProps) {
                 </div>
               </div>
 
+              {!isOrder && (
+              <>
               <div className="border-line-2 mt-4 flex items-center justify-between border-t pt-4">
                 <div>
                   <div className="text-sm font-semibold">Paid now</div>
@@ -205,13 +248,17 @@ export function PurchaseForm({ inventoryItems, suppliers }: PurchaseFormProps) {
                   />
                 </div>
               )}
+              </>
+              )}
             </CardContent>
           </Card>
 
           {/* Items */}
           <Card className="p-0">
             <div className="border-line-2 flex items-center justify-between border-b px-5 py-4">
-              <h2 className="text-base font-bold">Items received</h2>
+              <h2 className="text-base font-bold">
+                {isOrder ? "Items ordered" : "Items received"}
+              </h2>
               <Button
                 type="button"
                 variant="secondary"
@@ -257,10 +304,10 @@ export function PurchaseForm({ inventoryItems, suppliers }: PurchaseFormProps) {
                         Qty
                       </th>
                       <th className="text-ink-3 px-3 py-2.5 text-right text-xs font-semibold uppercase">
-                        Cost / unit
+                        {isOrder ? "Est. cost / unit" : "Cost / unit"}
                       </th>
                       <th className="text-ink-3 px-3 py-2.5 text-right text-xs font-semibold uppercase">
-                        Adds to stock
+                        {isOrder ? "Expected" : "Adds to stock"}
                       </th>
                       <th className="text-ink-3 px-5 py-2.5 text-right text-xs font-semibold uppercase">
                         Line total
@@ -353,10 +400,13 @@ export function PurchaseForm({ inventoryItems, suppliers }: PurchaseFormProps) {
         {/* Sidebar */}
         <Card className="lg:sticky lg:top-20">
           <CardContent>
-            <h3 className="mb-2 text-[15px] font-bold">Record purchase</h3>
+            <h3 className="mb-2 text-[15px] font-bold">
+              {isOrder ? "Log order" : "Record purchase"}
+            </h3>
             <p className="text-ink-3 mb-4 text-[13px] leading-relaxed">
-              Receiving stock updates each item&rsquo;s on-hand quantity and its
-              weighted-average cost.
+              {isOrder
+                ? "Logs an expected delivery. No stock or cash moves until you receive it."
+                : "Receiving stock updates each item’s on-hand quantity and its weighted-average cost."}
             </p>
 
             <div className="flex flex-col gap-2.5 text-sm">
@@ -379,7 +429,13 @@ export function PurchaseForm({ inventoryItems, suppliers }: PurchaseFormProps) {
             )}
 
             <Button type="submit" full size="lg" className="mt-5" disabled={loading}>
-              {loading ? "Recording..." : "Record Purchase"}
+              {loading
+                ? isOrder
+                  ? "Logging..."
+                  : "Recording..."
+                : isOrder
+                  ? "Log Order"
+                  : "Record Purchase"}
             </Button>
             <Button
               type="button"

@@ -149,6 +149,14 @@ export function PurchaseReviewDetail({
                   new Date(purchase.createdAt).toLocaleString(),
                 ],
                 ["Supplier", supplier?.name ?? "—"],
+                ...(purchase.isPaid
+                  ? ([
+                      [
+                        "Paid from register",
+                        `${filsToBhd(purchase.totalFils).toFixed(3)} BHD (already deducted)`,
+                      ],
+                    ] as [string, string][])
+                  : []),
               ].map(([label, value]) => (
                 <div
                   key={label}
@@ -243,6 +251,9 @@ export function PurchaseReviewDetail({
           <h3 className="mb-1 text-[15px] font-bold">Decision</h3>
           <p className="text-ink-3 mb-5 text-xs">
             Approving updates stock quantities and weighted-average costs.
+            {purchase.isPaid
+              ? " The register cash was already deducted at submit; approving reconciles it to the total above, and rejecting refunds it."
+              : ""}
           </p>
 
           {error && (

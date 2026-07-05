@@ -39,6 +39,7 @@ interface Props {
   expenses: ExpenseWithLines[];
   cashMovements: CashMovement[];
   purchases: PurchaseRow[];
+  payables: PurchaseRow[];
   settlements: Settlement[];
   projection: CashFlowProjection;
   recurringCosts: RecurringCost[];
@@ -67,6 +68,7 @@ export function MoneyDashboard({
   expenses,
   cashMovements,
   purchases,
+  payables,
   settlements,
   projection,
   recurringCosts,
@@ -125,7 +127,7 @@ export function MoneyDashboard({
         <MoneyOut
           purchases={purchases}
           expenses={expenses}
-          payables={purchases.filter((p) => !p.isPaid)}
+          payables={payables}
           onNewExpense={() => setForm("expense")}
           onRefresh={() => router.refresh()}
         />
@@ -337,6 +339,7 @@ function MoneyOut({
           onPay={pay}
           payingId={payingId}
           emptyMessage="No outstanding payables — everything is paid."
+          showStage
         />
       )}
       {sub === "expenses" && <ExpenseListView expenses={expenses} />}
@@ -344,16 +347,24 @@ function MoneyOut({
   );
 }
 
+const PAYABLE_STAGE: Record<string, string> = {
+  ordered: "Ordered — not yet received",
+  needs_review: "Awaiting review",
+  approved: "Received",
+};
+
 function PurchaseTable({
   rows,
   onPay,
   payingId,
   emptyMessage = "No purchases yet.",
+  showStage = false,
 }: {
   rows: PurchaseRow[];
   onPay: (id: string, method: "cash" | "bank") => void;
   payingId: string | null;
   emptyMessage?: string;
+  showStage?: boolean;
 }) {
   const [choosingId, setChoosingId] = useState<string | null>(null);
 
@@ -369,7 +380,12 @@ function PurchaseTable({
         >
           <div className="min-w-0 flex-1">
             <div className="text-[15px] font-bold">{p.supplierName}</div>
-            <div className="text-ink-3 text-[13px]">{p.purchasedOn}</div>
+            <div className="text-ink-3 text-[13px]">
+              {p.purchasedOn}
+              {showStage && PAYABLE_STAGE[p.status]
+                ? ` · ${PAYABLE_STAGE[p.status]}`
+                : ""}
+            </div>
           </div>
           {p.isPaid ? (
             <Badge variant="green">

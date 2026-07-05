@@ -24,7 +24,6 @@ import {
   updatePurchaseItemCost,
   updatePurchaseItemReceived,
   updatePurchaseStatus,
-  markPurchasePaid,
 } from "@/repositories/purchases";
 import { getInventoryItem, adjustStock } from "@/repositories/inventory-items";
 import { listInventoryItemsOps } from "@/repositories/worker-inventory";
@@ -293,7 +292,7 @@ export async function receivePurchaseByOwner(
   db: SupabaseClient,
   purchaseId: string,
   input: PurchaseReceiveInput,
-  reviewedBy: string,
+  _reviewedBy: string,
 ): Promise<void> {
   const existing = await getPurchaseWithItems(db, purchaseId);
   if (!existing) throw new Error("Purchase not found");
@@ -351,7 +350,7 @@ export async function receivePurchaseByWorker(
   db: SupabaseClient,
   purchaseId: string,
   input: PurchaseReceiveInput,
-  receivedBy: string,
+  _receivedBy: string,
 ): Promise<void> {
   const lines = await getPurchaseItemsOps(db, purchaseId);
   if (lines.length === 0) throw new Error("Order not found");
