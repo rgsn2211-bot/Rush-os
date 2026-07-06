@@ -1,15 +1,18 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { requireRoleApi } from "@/lib/auth";
 import { inventoryItemCreateSchema } from "@/lib/validators/inventory";
 import { getItem, editItem, removeItem } from "@/services/inventory";
+
+// All handlers return / mutate cost data, so owner + pos_manager only.
 
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const db = await createClient();
-  const { data: { user } } = await db.auth.getUser();
-  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await requireRoleApi(db, ["owner", "pos_manager"]);
+  if (auth instanceof Response) return auth;
 
   const { id } = await params;
   const item = await getItem(db, id);
@@ -23,8 +26,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const db = await createClient();
-  const { data: { user } } = await db.auth.getUser();
-  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await requireRoleApi(db, ["owner", "pos_manager"]);
+  if (auth instanceof Response) return auth;
 
   const { id } = await params;
   const body = await request.json();
@@ -42,8 +45,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const db = await createClient();
-  const { data: { user } } = await db.auth.getUser();
-  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await requireRoleApi(db, ["owner", "pos_manager"]);
+  if (auth instanceof Response) return auth;
 
   const { id } = await params;
   await removeItem(db, id);

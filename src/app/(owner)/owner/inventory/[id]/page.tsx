@@ -1,6 +1,7 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { requireOwner } from "@/lib/auth";
 import { getItem } from "@/services/inventory";
 import { formatFils, formatFilsRate } from "@/lib/calculations/currency";
 import { effectiveUnitCostFils } from "@/lib/calculations/costing";
@@ -8,7 +9,6 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ItemReviewCard } from "@/features/reviews/item-review-card";
 
 export default async function InventoryItemPage({
   params,
@@ -16,10 +16,7 @@ export default async function InventoryItemPage({
   params: Promise<{ id: string }>;
 }) {
   const db = await createClient();
-  const {
-    data: { user },
-  } = await db.auth.getUser();
-  if (!user) redirect("/login");
+  await requireOwner(db);
 
   const { id } = await params;
   const item = await getItem(db, id);
@@ -39,18 +36,6 @@ export default async function InventoryItemPage({
       >
         &larr; Back to inventory
       </Link>
-
-      {item.status === "needs_review" && (
-        <div className="mb-4">
-          <ItemReviewCard
-            itemId={item.id}
-            baseUnit={item.baseUnit}
-            submitterName={null}
-            initialCostFils={item.defaultCostFils}
-            initialCostingMethod={item.costingMethod}
-          />
-        </div>
-      )}
 
       <PageHeader
         title={item.name}

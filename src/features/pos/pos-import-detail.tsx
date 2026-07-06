@@ -19,12 +19,15 @@ interface ImportDetailProps {
     needsReviewCount: number;
     ignoredCount: number;
   };
+  /** Where "back to POS" navigation lands (the POS Manager role uses its own section). */
+  backHref?: string;
 }
 
 export function PosImportDetail({
   posImport,
   salesRows,
   summary,
+  backHref = "/owner/pos",
 }: ImportDetailProps) {
   const router = useRouter();
   const [processing, setProcessing] = useState(false);
@@ -70,7 +73,7 @@ export function PosImportDetail({
       setError(typeof data.error === "string" ? data.error : "Void failed");
       setVoiding(false);
     } else {
-      router.push("/owner/pos");
+      router.push(backHref);
       router.refresh();
     }
   }
@@ -168,7 +171,7 @@ export function PosImportDetail({
                     <>{summary.needsReviewCount} item{summary.needsReviewCount !== 1 ? "s need" : " needs"} a recipe. </>
                   )}
                   Go to the{" "}
-                  <Link href="/owner/pos" className="font-semibold underline">
+                  <Link href={backHref} className="font-semibold underline">
                     POS Items tab
                   </Link>{" "}
                   to map or ignore them. The status will update automatically.

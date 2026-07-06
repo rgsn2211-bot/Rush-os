@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { requireOwner } from "@/lib/auth";
+import { requireRoleApi } from "@/lib/auth";
 import { processImportInventory } from "@/services/pos-import";
 
 export async function POST(
@@ -8,7 +8,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const db = await createClient();
-  await requireOwner(db);
+  const auth = await requireRoleApi(db, ["owner", "pos_manager"]);
+  if (auth instanceof Response) return auth;
 
   const { id } = await params;
 

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { homeForRole, roleRedirectPath } from "@/lib/roles";
+import type { UserRole } from "@/types/inventory";
 
 async function getUserRole(
   supabase: ReturnType<typeof createServerClient>,
@@ -55,13 +57,18 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  if (!user && (pathname.startsWith("/owner") || pathname.startsWith("/worker"))) {
+  if (
+    !user &&
+    (pathname.startsWith("/owner") ||
+      pathname.startsWith("/worker") ||
+      pathname.startsWith("/pos-manager"))
+  ) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
   if (user) {
-    const role = await getUserRole(supabase, user.id);
-    const home = role === "worker" ? "/worker" : "/owner";
+    const role = (await getUserRole(supabase, user.id)) as UserRole | null;
+    const home = homeForRole(role);
 
     if (pathname === "/login") {
       return NextResponse.redirect(new URL(home, request.url));
@@ -71,12 +78,10 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(new URL(home, request.url));
     }
 
-    if (role === "worker" && pathname.startsWith("/owner")) {
-      return NextResponse.redirect(new URL("/worker", request.url));
-    }
-
-    if (role === "owner" && pathname.startsWith("/worker")) {
-      return NextResponse.redirect(new URL("/owner", request.url));
+    // Wall each role-gated section off from the other roles.
+    const away = roleRedirectPath(role, pathname);
+    if (away) {
+      return NextResponse.redirect(new URL(away, request.url));
     }
   }
 

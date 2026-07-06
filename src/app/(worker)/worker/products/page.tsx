@@ -4,7 +4,7 @@ import { requireWorker } from "@/lib/auth";
 import { getAllProducts } from "@/services/products";
 import { getAllProductGroups } from "@/services/product-groups";
 import { formatFils } from "@/lib/calculations/currency";
-import { WorkerSubmissions } from "@/features/worker/worker-submissions";
+import { WorkerCatalogList } from "@/features/worker/worker-catalog-list";
 
 export default async function WorkerProductsPage() {
   const db = await createClient();
@@ -25,7 +25,6 @@ export default async function WorkerProductsPage() {
     ]
       .filter(Boolean)
       .join(" · "),
-    status: p.status,
   }));
 
   return (
@@ -39,18 +38,11 @@ export default async function WorkerProductsPage() {
         </Link>
         <h1 className="text-ink text-xl font-bold">Products</h1>
         <p className="text-ink-3 mt-1 text-[14px]">
-          Tap any product to edit it. Changes are usable right away and the owner
-          reviews them.
+          Browse the menu and product list. New products and changes are
+          handled by the owner or the POS Manager.
         </p>
       </div>
-      <WorkerSubmissions
-        rows={rows}
-        editBase="/worker/products"
-        apiBase="/api/worker/products"
-        addHref="/worker/products/new"
-        addLabel="Create Product"
-        emptyText="No products yet."
-      />
+      <WorkerCatalogList rows={rows} emptyText="No products yet." />
     </div>
   );
 }

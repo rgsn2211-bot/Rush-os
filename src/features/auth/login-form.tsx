@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { homeForRole } from "@/lib/roles";
+import type { UserRole } from "@/types/inventory";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -34,7 +36,7 @@ export function LoginForm() {
       .eq("id", authData.user.id)
       .single();
 
-    const home = profile?.role === "worker" ? "/worker" : "/owner";
+    const home = homeForRole(profile?.role as UserRole | undefined);
     router.push(home);
     router.refresh();
   }

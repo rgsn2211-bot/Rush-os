@@ -1,6 +1,6 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { requireOwner } from "@/lib/auth";
 import { getAllItems } from "@/services/inventory";
 import { getAllProductGroups } from "@/services/product-groups";
 import { PageHeader } from "@/components/ui/page-header";
@@ -8,8 +8,7 @@ import { ProductForm } from "@/features/products/product-form";
 
 export default async function NewProductPage() {
   const db = await createClient();
-  const { data: { user } } = await db.auth.getUser();
-  if (!user) redirect("/login");
+  await requireOwner(db);
 
   const [items, groups] = await Promise.all([
     getAllItems(db),

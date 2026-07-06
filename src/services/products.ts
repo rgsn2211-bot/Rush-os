@@ -1,14 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   Product,
-  ProductWithSubmitter,
   RecipeIngredient,
   InventoryItem,
 } from "@/types/inventory";
-import type {
-  ProductCreateInput,
-  WorkerProductCreateInput,
-} from "@/lib/validators/inventory";
+import type { ProductCreateInput } from "@/lib/validators/inventory";
 import {
   listProducts,
   getProduct,
@@ -17,14 +13,8 @@ import {
   deleteProduct,
   getRecipeIngredients,
   setRecipeIngredients,
-  listPendingProducts,
-  updateProductReview,
-  listMyProducts,
-  markProductNeedsReview,
-  voidProduct,
 } from "@/repositories/products";
 import { listInventoryItems } from "@/repositories/inventory-items";
-import { listInventoryItemsOps } from "@/repositories/worker-inventory";
 import {
   recipeCostFils,
   grossMargin,
@@ -120,8 +110,9 @@ export async function getProductWithCost(
 export async function createProduct(
   db: SupabaseClient,
   input: ProductCreateInput,
+  createdBy?: string,
 ): Promise<Product> {
-  const product = await insertProduct(db, input);
+  const product = await insertProduct(db, input, { createdBy });
 
   if (input.recipe.length > 0) {
     await setRecipeIngredients(db, product.id, input.recipe);
@@ -149,128 +140,6 @@ export async function removeProduct(
   id: string,
 ): Promise<void> {
   return deleteProduct(db, id);
-}
-
-// ---------- Worker authoring (immediately usable, owner-reviewed) ------------
-
-/**
- * Worker creates a product with a recipe. Flagged needs_review but immediately
- * usable (POS deduction keys off the recipe, not status). Recipe items are
- * validated against the cost-free worker view; no cost/margin is ever computed.
- */
-export async function createWorkerProduct(
-  db: SupabaseClient,
-  input: WorkerProductCreateInput,
-  createdBy: string,
-): Promise<Product> {
-  await assertRecipeItemsVisible(db, input.recipe);
-
-  const product = await insertProduct(db, input, {
-    status: "needs_review",
-    createdBy,
-  });
-  await setRecipeIngredients(db, product.id, input.recipe);
-  return product;
-}
-
-/**
- * Worker edits any product. The change applies immediately and re-flags the
- * product for owner review. Runs on an admin client (see the API route) so a
- * worker can edit approved products without a broad worker RLS write policy —
- * the app only ever writes non-cost fields + the recipe.
- */
-export async function editWorkerProduct(
-  db: SupabaseClient,
-  id: string,
-  input: WorkerProductCreateInput,
-): Promise<Product> {
-  await assertRecipeItemsVisible(db, input.recipe);
-
-  const product = await updateProduct(db, id, {
-    name: input.name,
-    category: input.category,
-    groupId: input.groupId,
-    priceFils: input.priceFils,
-  });
-  await setRecipeIngredients(db, id, input.recipe);
-  await markProductNeedsReview(db, id);
-  return product;
-}
-
-/** Worker deletes any product — soft void (keeps the row + FKs, POS skips voided). */
-export async function removeWorkerProduct(
-  db: SupabaseClient,
-  id: string,
-): Promise<void> {
-  return voidProduct(db, id);
-}
-
-/** A worker's own product submissions, for their index page. */
-export async function getMyProducts(
-  db: SupabaseClient,
-  createdBy: string,
-): Promise<Product[]> {
-  return listMyProducts(db, createdBy);
-}
-
-/** Cost-free load of a product + its recipe, for a worker edit form. */
-export async function getWorkerProductForEdit(
-  db: SupabaseClient,
-  id: string,
-): Promise<{ product: Product; recipe: RecipeIngredient[] } | null> {
-  const product = await getProduct(db, id);
-  if (!product) return null;
-  const recipe = await getRecipeIngredients(db, id);
-  return { product, recipe };
-}
-
-/** Guards that every recipe ingredient references an item the worker can see. */
-async function assertRecipeItemsVisible(
-  db: SupabaseClient,
-  recipe: { inventoryItemId: string }[],
-): Promise<void> {
-  const visible = new Set((await listInventoryItemsOps(db)).map((i) => i.id));
-  for (const line of recipe) {
-    if (!visible.has(line.inventoryItemId)) {
-      throw new Error("Recipe references an unknown inventory item");
-    }
-  }
-}
-
-// ---------- Owner review ----------------------------------------------------
-
-export async function getPendingProducts(
-  db: SupabaseClient,
-): Promise<ProductWithSubmitter[]> {
-  return listPendingProducts(db);
-}
-
-/** Owner approves a worker product (no stock effect — just confirms it). */
-export async function approveProduct(
-  db: SupabaseClient,
-  id: string,
-  reviewedBy: string,
-): Promise<Product> {
-  const product = await getProduct(db, id);
-  if (!product) throw new Error("Product not found");
-  if (product.status !== "needs_review") {
-    throw new Error("This product has already been reviewed");
-  }
-  return updateProductReview(db, id, "approved", reviewedBy);
-}
-
-/** Owner rejects a worker product (voided; skipped by POS deduction). */
-export async function rejectProduct(
-  db: SupabaseClient,
-  id: string,
-  reviewedBy: string,
-): Promise<Product> {
-  const product = await getProduct(db, id);
-  if (!product) throw new Error("Product not found");
-  if (product.status !== "needs_review") {
-    throw new Error("This product has already been reviewed");
-  }
-  return updateProductReview(db, id, "voided", reviewedBy);
 }
 
 export async function getProductRecipe(
