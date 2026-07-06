@@ -14,24 +14,48 @@ import {
   updateRegisterCashOutStatus,
   deleteRegisterCashOut,
 } from "@/repositories/register-cash-outs";
-import { insertCashMovement } from "@/repositories/cash-movements";
+import {
+  insertCashMovement,
+  deleteCashMovementsBySource,
+} from "@/repositories/cash-movements";
+
+function cashOutLabel(kind: RegisterCashOut["kind"]): string {
+  return kind === "purchase" ? "Register purchase" : "Register withdrawal";
+}
 
 /**
- * Worker records cash leaving the register. Created as needs_review; the
- * register balance is NOT touched until the owner approves.
+ * Worker records cash leaving the register. The register movement is posted
+ * immediately — the cash physically left the drawer now — so the balance is
+ * truthful straight away. The entry still goes to owner review for oversight.
  */
 export async function logCashOut(
   db: SupabaseClient,
   input: RegisterCashOutCreateInput,
   createdBy: string,
 ): Promise<RegisterCashOut> {
-  return insertRegisterCashOut(db, {
+  const cashOut = await insertRegisterCashOut(db, {
     kind: input.kind,
     amountFils: bhdToFils(input.amountBhd),
     reason: input.reason,
     note: input.note,
     createdBy,
   });
+
+  await insertCashMovement(db, {
+    direction: "out",
+    reason: `${cashOutLabel(cashOut.kind)}: ${cashOut.reason}`,
+    amountFils: cashOut.amountFils,
+    method: "Cash",
+    occurredOn: cashOut.createdAt.split("T")[0],
+    affectsPl: false,
+    account: "register",
+    sourceType: "register_cash_out",
+    sourceId: cashOut.id,
+    note: cashOut.note ?? undefined,
+    createdBy,
+  });
+
+  return cashOut;
 }
 
 export async function getAllCashOuts(
@@ -66,13 +90,16 @@ export async function deleteOwnCashOut(
   if (cashOut.status !== "needs_review") {
     throw new Error("Can only delete a pending submission");
   }
+  // Reverse the register movement first (while the cash-out is still pending,
+  // which the worker's RLS delete policy requires), then remove the row.
+  await deleteCashMovementsBySource(db, "register_cash_out", id);
   await deleteRegisterCashOut(db, id);
 }
 
 /**
- * Owner reviews a cash-out. Approving posts a register `out` movement (tagged
- * with the cash-out id, so it's traceable) — the register balance drops by the
- * amount. Rejecting voids it with no money effect.
+ * Owner reviews a cash-out. The register movement was already posted when the
+ * worker recorded it, so approving is just oversight (confirm). Rejecting
+ * reverses the movement so the drawer reflects that the cash didn't leave.
  */
 export async function reviewCashOut(
   db: SupabaseClient,
@@ -87,24 +114,10 @@ export async function reviewCashOut(
   }
 
   if (action === "reject") {
+    await deleteCashMovementsBySource(db, "register_cash_out", id);
     await updateRegisterCashOutStatus(db, id, "voided", reviewedBy);
     return;
   }
-
-  const label = cashOut.kind === "purchase" ? "Register purchase" : "Register withdrawal";
-  await insertCashMovement(db, {
-    direction: "out",
-    reason: `${label}: ${cashOut.reason}`,
-    amountFils: cashOut.amountFils,
-    method: "Cash",
-    occurredOn: cashOut.createdAt.split("T")[0],
-    affectsPl: false,
-    account: "register",
-    sourceType: "register_cash_out",
-    sourceId: id,
-    note: cashOut.note ?? undefined,
-    createdBy: reviewedBy,
-  });
 
   await updateRegisterCashOutStatus(db, id, "approved", reviewedBy);
 }
