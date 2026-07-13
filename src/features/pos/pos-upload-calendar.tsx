@@ -7,6 +7,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 interface PosUploadCalendarProps {
+  /** Base of the import-detail links (the POS Manager role uses its own section). */
+  importDetailBase?: string;
   imports: PosImport[];
   selectedDate: string | null;
   onSelectDate: (date: string | null) => void;
@@ -22,7 +24,12 @@ function toDateKey(year: number, month: number, day: number): string {
   return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-export function PosUploadCalendar({ imports, selectedDate, onSelectDate }: PosUploadCalendarProps) {
+export function PosUploadCalendar({
+  imports,
+  selectedDate,
+  onSelectDate,
+  importDetailBase = "/owner/pos",
+}: PosUploadCalendarProps) {
   const router = useRouter();
   const now = new Date();
   const [viewYear, setViewYear] = useState(now.getFullYear());
@@ -76,7 +83,7 @@ export function PosUploadCalendar({ imports, selectedDate, onSelectDate }: PosUp
   function handleDayClick(dateKey: string) {
     const imp = importsByDate.get(dateKey);
     if (imp) {
-      router.push(`/owner/pos/${imp.id}`);
+      router.push(`${importDetailBase}/${imp.id}`);
     } else {
       onSelectDate(selectedDate === dateKey ? null : dateKey);
     }

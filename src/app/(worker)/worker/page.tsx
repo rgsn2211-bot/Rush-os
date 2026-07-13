@@ -61,13 +61,13 @@ export default async function WorkerHome() {
     },
     {
       label: "Inventory Items",
-      desc: "Add & manage stock items",
+      desc: "Browse stock items",
       icon: Boxes,
       href: "/worker/inventory",
     },
     {
       label: "Products",
-      desc: "Create drinks, modifiers & more",
+      desc: "Browse drinks, modifiers & more",
       icon: Coffee,
       href: "/worker/products",
     },

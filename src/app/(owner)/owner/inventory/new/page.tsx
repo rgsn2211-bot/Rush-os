@@ -1,14 +1,13 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { requireOwner } from "@/lib/auth";
 import { getAllSuppliers } from "@/services/suppliers";
 import { PageHeader } from "@/components/ui/page-header";
 import { InventoryItemForm } from "@/features/inventory/inventory-item-form";
 
 export default async function NewInventoryItemPage() {
   const db = await createClient();
-  const { data: { user } } = await db.auth.getUser();
-  if (!user) redirect("/login");
+  await requireOwner(db);
 
   const suppliers = await getAllSuppliers(db);
 

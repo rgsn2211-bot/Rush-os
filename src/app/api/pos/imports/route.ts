@@ -1,12 +1,13 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { requireOwner } from "@/lib/auth";
+import { requireRoleApi } from "@/lib/auth";
 import { uploadSalesImport } from "@/services/pos-import";
 import { listPosImports } from "@/repositories/pos-imports";
 
 export async function GET() {
   const db = await createClient();
-  await requireOwner(db);
+  const auth = await requireRoleApi(db, ["owner", "pos_manager"]);
+  if (auth instanceof Response) return auth;
 
   const imports = await listPosImports(db);
   return Response.json(imports);
@@ -14,7 +15,8 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   const db = await createClient();
-  const authUser = await requireOwner(db);
+  const authUser = await requireRoleApi(db, ["owner", "pos_manager"]);
+  if (authUser instanceof Response) return authUser;
 
   const expectedDate = request.nextUrl.searchParams.get("expectedDate");
 

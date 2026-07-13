@@ -1,7 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   Product,
-  ProductWithSubmitter,
   RecipeIngredient,
   ReviewStatus,
 } from "@/types/inventory";
@@ -15,22 +14,6 @@ export async function listProducts(
     .select("*")
     .neq("status", "voided")
     .order("name");
-
-  if (error) throw error;
-  return data.map(toProduct);
-}
-
-/** A worker's own products (any status except voided), newest first. */
-export async function listMyProducts(
-  db: SupabaseClient,
-  createdBy: string,
-): Promise<Product[]> {
-  const { data, error } = await db
-    .from("products")
-    .select("*")
-    .eq("created_by", createdBy)
-    .neq("status", "voided")
-    .order("created_at", { ascending: false });
 
   if (error) throw error;
   return data.map(toProduct);
@@ -151,82 +134,6 @@ export async function setRecipeIngredients(
 
   if (error) throw error;
   return data.map(toRecipeIngredient);
-}
-
-/** Products awaiting owner review, newest first, with the submitter's name. */
-export async function listPendingProducts(
-  db: SupabaseClient,
-): Promise<ProductWithSubmitter[]> {
-  const { data, error } = await db
-    .from("products")
-    .select("*")
-    .eq("status", "needs_review")
-    .order("created_at", { ascending: false });
-
-  if (error) throw error;
-  const products = data.map(toProduct);
-
-  // Resolve submitter names via a batched profiles lookup (mirrors waste repo).
-  const creatorIds = [
-    ...new Set(products.map((p) => p.createdBy).filter(Boolean)),
-  ] as string[];
-  const nameMap = new Map<string, string>();
-  if (creatorIds.length > 0) {
-    const { data: profiles } = await db
-      .from("profiles")
-      .select("id, display_name")
-      .in("id", creatorIds);
-    if (profiles) for (const p of profiles) nameMap.set(p.id, p.display_name);
-  }
-
-  return products.map((p) => ({
-    ...p,
-    submitterName: (p.createdBy && nameMap.get(p.createdBy)) ?? null,
-  }));
-}
-
-/** Re-flag a product for review after a worker edit (no reviewer stamp). */
-export async function markProductNeedsReview(
-  db: SupabaseClient,
-  id: string,
-): Promise<void> {
-  const { error } = await db
-    .from("products")
-    .update({ status: "needs_review" })
-    .eq("id", id);
-
-  if (error) throw error;
-}
-
-/** Soft-delete a product (worker delete). Keeps the row + FKs intact. */
-export async function voidProduct(
-  db: SupabaseClient,
-  id: string,
-): Promise<void> {
-  const { error } = await db
-    .from("products")
-    .update({ status: "voided" })
-    .eq("id", id);
-
-  if (error) throw error;
-}
-
-/** Owner review action: flip status and stamp who/when. */
-export async function updateProductReview(
-  db: SupabaseClient,
-  id: string,
-  status: ReviewStatus,
-  reviewedBy: string,
-): Promise<Product> {
-  const { data, error } = await db
-    .from("products")
-    .update({ status, reviewed_by: reviewedBy, reviewed_at: new Date().toISOString() })
-    .eq("id", id)
-    .select("*")
-    .single();
-
-  if (error) throw error;
-  return toProduct(data);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

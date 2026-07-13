@@ -17,9 +17,17 @@ import { Select } from "@/components/ui/select";
 interface InventoryItemFormProps {
   suppliers: Supplier[];
   item?: InventoryItem;
+  /** Where to go after save / on cancel. Defaults to the owner section. */
+  successPath?: string;
+  cancelPath?: string;
 }
 
-export function InventoryItemForm({ suppliers, item }: InventoryItemFormProps) {
+export function InventoryItemForm({
+  suppliers,
+  item,
+  successPath,
+  cancelPath,
+}: InventoryItemFormProps) {
   const router = useRouter();
   const isEdit = !!item;
   const [loading, setLoading] = useState(false);
@@ -106,7 +114,9 @@ export function InventoryItemForm({ suppliers, item }: InventoryItemFormProps) {
       return;
     }
 
-    if (isEdit) {
+    if (successPath) {
+      router.push(successPath);
+    } else if (isEdit) {
       router.push(`/owner/inventory/${item.id}`);
     } else {
       router.push("/owner/inventory");
@@ -510,9 +520,10 @@ export function InventoryItemForm({ suppliers, item }: InventoryItemFormProps) {
               className="mt-2"
               onClick={() =>
                 router.push(
-                  isEdit
-                    ? `/owner/inventory/${item.id}`
-                    : "/owner/inventory",
+                  cancelPath ??
+                    (isEdit
+                      ? `/owner/inventory/${item.id}`
+                      : "/owner/inventory"),
                 )
               }
             >

@@ -1,13 +1,13 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { requireOwner } from "@/lib/auth";
 import { getProductWithCost, buildCostBreakdown } from "@/services/products";
 import { formatFils } from "@/lib/calculations/currency";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ProductReviewCard } from "@/features/reviews/product-review-card";
 
 export default async function ProductDetailPage({
   params,
@@ -15,10 +15,7 @@ export default async function ProductDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const db = await createClient();
-  const {
-    data: { user },
-  } = await db.auth.getUser();
-  if (!user) redirect("/login");
+  await requireOwner(db);
 
   const { id } = await params;
   const product = await getProductWithCost(db, id);
@@ -41,12 +38,6 @@ export default async function ProductDetailPage({
       >
         &larr; Back to products
       </Link>
-
-      {product.status === "needs_review" && (
-        <div className="mb-4">
-          <ProductReviewCard productId={product.id} submitterName={null} />
-        </div>
-      )}
 
       <PageHeader
         title={product.name}

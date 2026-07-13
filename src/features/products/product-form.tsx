@@ -29,6 +29,9 @@ interface ProductFormProps {
   groups: ProductGroup[];
   product?: Product;
   existingRecipe?: RecipeIngredient[];
+  /** Where to go after save / on cancel. Defaults to the owner section. */
+  successPath?: string;
+  cancelPath?: string;
 }
 
 export function ProductForm({
@@ -36,6 +39,8 @@ export function ProductForm({
   groups,
   product,
   existingRecipe,
+  successPath,
+  cancelPath,
 }: ProductFormProps) {
   const router = useRouter();
   const isEdit = !!product;
@@ -142,7 +147,9 @@ export function ProductForm({
       return;
     }
 
-    if (isEdit) {
+    if (successPath) {
+      router.push(successPath);
+    } else if (isEdit) {
       router.push(`/owner/products/${product.id}`);
     } else {
       router.push("/owner/products");
@@ -401,9 +408,10 @@ export function ProductForm({
               className="mt-2"
               onClick={() =>
                 router.push(
-                  isEdit
-                    ? `/owner/products/${product.id}`
-                    : "/owner/products",
+                  cancelPath ??
+                    (isEdit
+                      ? `/owner/products/${product.id}`
+                      : "/owner/products"),
                 )
               }
             >

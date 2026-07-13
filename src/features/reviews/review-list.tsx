@@ -6,8 +6,6 @@ import type {
   PurchaseWithSubmitter,
   WasteLogWithDetails,
   InventoryCountSummary,
-  InventoryItemWithSubmitter,
-  ProductWithSubmitter,
 } from "@/types/inventory";
 import type { ComplimentaryLogWithSubmitter } from "@/types/pos";
 import type { DailyClosingWithSubmitter } from "@/types/closing";
@@ -22,8 +20,6 @@ import {
   Gift,
   Trash2,
   ClipboardList,
-  Boxes,
-  Coffee,
 } from "lucide-react";
 
 interface ReviewListProps {
@@ -33,8 +29,6 @@ interface ReviewListProps {
   closings?: DailyClosingWithSubmitter[];
   cashOuts?: RegisterCashOutWithSubmitter[];
   inventoryCounts?: InventoryCountSummary[];
-  inventoryItems?: InventoryItemWithSubmitter[];
-  products?: ProductWithSubmitter[];
 }
 
 type Filter =
@@ -45,9 +39,7 @@ type Filter =
   | "waste"
   | "closing"
   | "cashout"
-  | "count"
-  | "item"
-  | "product";
+  | "count";
 
 export function ReviewList({
   purchases,
@@ -56,8 +48,6 @@ export function ReviewList({
   closings = [],
   cashOuts = [],
   inventoryCounts = [],
-  inventoryItems = [],
-  products = [],
 }: ReviewListProps) {
   const [filter, setFilter] = useState<Filter>("all");
 
@@ -68,8 +58,6 @@ export function ReviewList({
   const closingCount = closings.length;
   const cashOutCount = cashOuts.length;
   const countCount = inventoryCounts.length;
-  const itemCount = inventoryItems.length;
-  const productCount = products.length;
 
   const filteredPurchases = purchases.filter((p) => {
     if (filter === "cash") return p.isPaid;
@@ -93,54 +81,13 @@ export function ReviewList({
   const filteredCounts =
     filter === "count" || filter === "all" ? inventoryCounts : [];
 
-  const filteredItems =
-    filter === "item" || filter === "all" ? inventoryItems : [];
-
-  const filteredProducts =
-    filter === "product" || filter === "all" ? products : [];
-
   const totalCount =
     filteredPurchases.length +
     filteredComp.length +
     filteredWaste.length +
     filteredClosings.length +
     filteredCashOuts.length +
-    filteredCounts.length +
-    filteredItems.length +
-    filteredProducts.length;
-
-  // Whether any section rendered above the current one (drives the row divider).
-  const before = {
-    comp: filteredPurchases.length,
-    waste: filteredPurchases.length + filteredComp.length,
-    closing: filteredPurchases.length + filteredComp.length + filteredWaste.length,
-    cashout:
-      filteredPurchases.length +
-      filteredComp.length +
-      filteredWaste.length +
-      filteredClosings.length,
-    count:
-      filteredPurchases.length +
-      filteredComp.length +
-      filteredWaste.length +
-      filteredClosings.length +
-      filteredCashOuts.length,
-    item:
-      filteredPurchases.length +
-      filteredComp.length +
-      filteredWaste.length +
-      filteredClosings.length +
-      filteredCashOuts.length +
-      filteredCounts.length,
-    product:
-      filteredPurchases.length +
-      filteredComp.length +
-      filteredWaste.length +
-      filteredClosings.length +
-      filteredCashOuts.length +
-      filteredCounts.length +
-      filteredItems.length,
-  };
+    filteredCounts.length;
 
   const categories: { key: Filter; label: string; count: number }[] = [
     {
@@ -152,9 +99,7 @@ export function ReviewList({
         wasteCount +
         closingCount +
         cashOutCount +
-        countCount +
-        itemCount +
-        productCount,
+        countCount,
     },
     { key: "purchases", label: "Supplier Deliveries", count: supplierCount },
     { key: "cash", label: "Cash Purchases", count: cashCount },
@@ -163,8 +108,6 @@ export function ReviewList({
     { key: "closing", label: "Daily Closing", count: closingCount },
     { key: "cashout", label: "Register Cash Out", count: cashOutCount },
     { key: "count", label: "Inventory Count", count: countCount },
-    { key: "item", label: "New Items", count: itemCount },
-    { key: "product", label: "New Products", count: productCount },
   ];
 
   return (
@@ -382,56 +325,6 @@ export function ReviewList({
                 <div className="text-ink-2 mt-0.5 text-[13px]">
                   {c.submitterName ?? "Unknown"} · {c.itemCount} item
                   {c.itemCount !== 1 ? "s" : ""} counted
-                </div>
-              </div>
-              <span className="text-ink-3 text-sm">›</span>
-            </Link>
-          ))}
-          {filteredItems.map((it, i) => (
-            <Link
-              key={it.id}
-              href={`/owner/inventory/${it.id}`}
-              className={`hover:bg-bg flex items-center gap-4 px-5 py-4 ${
-                before.item > 0 || i > 0 ? "border-line-2 border-t" : ""
-              }`}
-            >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-50">
-                <Boxes size={20} className="text-teal-600" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[15px] font-bold">{it.name}</span>
-                  <Badge variant="amber">New item</Badge>
-                </div>
-                <div className="text-ink-2 mt-0.5 text-[13px]">
-                  {it.submitterName ?? "Unknown"} ·{" "}
-                  {new Date(it.createdAt).toLocaleDateString()}
-                  {it.category ? ` · ${it.category}` : ""} · set cost to approve
-                </div>
-              </div>
-              <span className="text-ink-3 text-sm">›</span>
-            </Link>
-          ))}
-          {filteredProducts.map((p, i) => (
-            <Link
-              key={p.id}
-              href={`/owner/products/${p.id}`}
-              className={`hover:bg-bg flex items-center gap-4 px-5 py-4 ${
-                before.product > 0 || i > 0 ? "border-line-2 border-t" : ""
-              }`}
-            >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-50">
-                <Coffee size={20} className="text-orange-500" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[15px] font-bold">{p.name}</span>
-                  <Badge variant="amber">New product</Badge>
-                </div>
-                <div className="text-ink-2 mt-0.5 text-[13px]">
-                  {p.submitterName ?? "Unknown"} ·{" "}
-                  {new Date(p.createdAt).toLocaleDateString()}
-                  {p.priceFils > 0 ? ` · ${formatFils(p.priceFils)} BHD` : ""}
                 </div>
               </div>
               <span className="text-ink-3 text-sm">›</span>

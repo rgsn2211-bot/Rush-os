@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { requireRoleApi } from "@/lib/auth";
 import { productCreateSchema } from "@/lib/validators/inventory";
 import {
   getProductWithCost,
@@ -7,13 +8,15 @@ import {
   removeProduct,
 } from "@/services/products";
 
+// GET returns recipe cost/margin, so like the writes it is owner + pos_manager.
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const db = await createClient();
-  const { data: { user } } = await db.auth.getUser();
-  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await requireRoleApi(db, ["owner", "pos_manager"]);
+  if (auth instanceof Response) return auth;
 
   const { id } = await params;
   const product = await getProductWithCost(db, id);
@@ -27,8 +30,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const db = await createClient();
-  const { data: { user } } = await db.auth.getUser();
-  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await requireRoleApi(db, ["owner", "pos_manager"]);
+  if (auth instanceof Response) return auth;
 
   const { id } = await params;
   const body = await request.json();
@@ -46,8 +49,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const db = await createClient();
-  const { data: { user } } = await db.auth.getUser();
-  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await requireRoleApi(db, ["owner", "pos_manager"]);
+  if (auth instanceof Response) return auth;
 
   const { id } = await params;
   await removeProduct(db, id);

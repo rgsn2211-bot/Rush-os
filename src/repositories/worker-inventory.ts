@@ -13,37 +13,6 @@ export async function listInventoryItemsOps(
   return data.map(toInventoryItemOps);
 }
 
-/** A single item from the cost-free view, for a worker edit-form prefill. */
-export async function getInventoryItemOps(
-  db: SupabaseClient,
-  id: string,
-): Promise<InventoryItemOps | null> {
-  const { data, error } = await db
-    .from("inventory_items_worker")
-    .select("*")
-    .eq("id", id)
-    .single();
-
-  if (error && error.code === "PGRST116") return null;
-  if (error) throw error;
-  return toInventoryItemOps(data);
-}
-
-/** The worker's own submissions (cost-free view), newest first. */
-export async function listMyInventoryItemsOps(
-  db: SupabaseClient,
-  createdBy: string,
-): Promise<InventoryItemOps[]> {
-  const { data, error } = await db
-    .from("inventory_items_worker")
-    .select("*")
-    .eq("created_by", createdBy)
-    .order("created_at", { ascending: false });
-
-  if (error) throw error;
-  return data.map(toInventoryItemOps);
-}
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toInventoryItemOps(row: any): InventoryItemOps {
   return {

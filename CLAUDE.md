@@ -4,7 +4,9 @@
 
 Rush OS is the internal operating system for **Rush**, a small specialty coffee
 shop (car pickup + delivery-app orders). It is **not** a customer ordering app.
-Two interfaces: a **worker tablet** app and an **owner dashboard** (desktop/tablet/phone).
+Three interfaces, one per role: a **worker tablet** app, an **owner dashboard**
+(desktop/tablet/phone), and a **POS Manager** section (`/pos-manager`) for a
+trusted non-owner who maintains the catalog and POS mapping.
 
 The owner is newer to this stack — prefer clear, explained changes over clever ones.
 
@@ -24,6 +26,11 @@ Supabase + Vercel.
   Never do money math in floating-point BHD. Display always 3 decimals.
 - **Permissions are enforced in the database (RLS)** and re-checked in services —
   not merely hidden in the UI. Workers must never access financial/profit data.
+  Three roles (`profiles.role`): `owner` (everything), `pos_manager` (items incl.
+  cost, products/recipes incl. cost & margin, POS mapping/imports — but NO Money,
+  EOD, settlements, expenses, or profit data), `worker` (operational submissions,
+  cost-free views only). Role→section mapping lives in `src/lib/roles.ts`; guards
+  are `requireRole`/`requireRoleApi` in `src/lib/auth.ts` plus `src/proxy.ts`.
 - Keep all migrations, types, parsers, and business rules **in the repo** — never
   hide critical logic in the Supabase/Vercel dashboards.
 
@@ -66,8 +73,13 @@ Supabase + Vercel.
 ## Feature status
 
 **Built and working:**
-- Inventory management (owner CRUD, worker read-only view, alerts)
-- Products + recipes (owner CRUD, linked to inventory items)
+- Inventory management (owner + POS Manager CRUD incl. cost, worker read-only
+  cost-free view, alerts)
+- Products + recipes (owner + POS Manager CRUD, linked to inventory items)
+- POS Manager role (`/pos-manager`: POS mapping/imports home, products,
+  inventory; creations are auto-approved with `created_by` recorded — no owner
+  review queue. Accounts are provisioned manually: create the Supabase Auth
+  user, then `UPDATE profiles SET role = 'pos_manager' WHERE id = ...`)
 - Suppliers (owner CRUD, worker read-only)
 - Purchases / receive stock (worker submit → owner review; marking paid
   requires choosing cash/bank and auto-deducts from that account; worker

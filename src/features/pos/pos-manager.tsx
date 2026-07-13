@@ -25,11 +25,18 @@ interface PosManagerProps {
   catalog: PosItemCatalogWithProduct[];
   products: Product[];
   imports: PosImport[];
+  /** Base of the import-detail links (the POS Manager role uses its own section). */
+  importDetailBase?: string;
 }
 
 type Tab = "mapping" | "imports" | "diagnostics";
 
-export function PosManager({ catalog, products, imports }: PosManagerProps) {
+export function PosManager({
+  catalog,
+  products,
+  imports,
+  importDetailBase = "/owner/pos",
+}: PosManagerProps) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("mapping");
   const [search, setSearch] = useState("");
@@ -281,6 +288,7 @@ export function PosManager({ catalog, products, imports }: PosManagerProps) {
             imports={imports}
             selectedDate={selectedUploadDate}
             onSelectDate={setSelectedUploadDate}
+            importDetailBase={importDetailBase}
           />
 
           <Card className="mb-4">
@@ -379,7 +387,7 @@ export function PosManager({ catalog, products, imports }: PosManagerProps) {
                           variant="secondary"
                           size="sm"
                           onClick={() =>
-                            router.push(`/owner/pos/${imp.id}`)
+                            router.push(`${importDetailBase}/${imp.id}`)
                           }
                         >
                           View

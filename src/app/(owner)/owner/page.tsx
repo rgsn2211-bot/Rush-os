@@ -7,8 +7,6 @@ import { getPendingPurchases } from "@/services/purchases";
 import { getPendingComplimentary } from "@/services/complimentary";
 import { getPendingWaste } from "@/services/waste";
 import { getPendingClosings } from "@/services/daily-closing";
-import { getPendingInventoryItems } from "@/services/inventory";
-import { getPendingProducts } from "@/services/products";
 import { formatFils } from "@/lib/calculations/currency";
 import { PageHeader } from "@/components/ui/page-header";
 import { MetricCard } from "@/components/ui/metric-card";
@@ -28,8 +26,6 @@ export default async function OwnerDashboard() {
     pendingComp,
     pendingWaste,
     pendingClosings,
-    pendingItems,
-    pendingProducts,
   ] = await Promise.all([
     getAllItems(db),
     getAllProductsWithCosts(db),
@@ -37,17 +33,13 @@ export default async function OwnerDashboard() {
     getPendingComplimentary(db),
     getPendingWaste(db),
     getPendingClosings(db),
-    getPendingInventoryItems(db),
-    getPendingProducts(db),
   ]);
 
   const pendingCount =
     pendingPurchases.length +
     pendingComp.length +
     pendingWaste.length +
-    pendingClosings.length +
-    pendingItems.length +
-    pendingProducts.length;
+    pendingClosings.length;
 
   const totalValueFils = items.reduce((sum, i) => sum + i.stockValueFils, 0);
   const lowStock = items.filter(

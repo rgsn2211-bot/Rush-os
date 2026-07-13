@@ -1,6 +1,7 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { requireOwner } from "@/lib/auth";
 import { getItem } from "@/services/inventory";
 import { getAllSuppliers } from "@/services/suppliers";
 import { PageHeader } from "@/components/ui/page-header";
@@ -12,10 +13,7 @@ export default async function EditInventoryItemPage({
   params: Promise<{ id: string }>;
 }) {
   const db = await createClient();
-  const {
-    data: { user },
-  } = await db.auth.getUser();
-  if (!user) redirect("/login");
+  await requireOwner(db);
 
   const { id } = await params;
   const [item, suppliers] = await Promise.all([
