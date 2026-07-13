@@ -1,6 +1,7 @@
-import { redirect, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { requireOwner } from "@/lib/auth";
 import { getProductWithCost } from "@/services/products";
 import { getAllItems } from "@/services/inventory";
 import { getAllProductGroups } from "@/services/product-groups";
@@ -13,10 +14,7 @@ export default async function EditProductPage({
   params: Promise<{ id: string }>;
 }) {
   const db = await createClient();
-  const {
-    data: { user },
-  } = await db.auth.getUser();
-  if (!user) redirect("/login");
+  await requireOwner(db);
 
   const { id } = await params;
   const [product, items, groups] = await Promise.all([

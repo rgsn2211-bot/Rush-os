@@ -6,8 +6,6 @@ import { getPendingWaste } from "@/services/waste";
 import { getPendingClosings } from "@/services/daily-closing";
 import { getPendingCashOuts } from "@/services/register-cash-out";
 import { getPendingCounts } from "@/services/inventory-count";
-import { getPendingInventoryItems } from "@/services/inventory";
-import { getPendingProducts } from "@/services/products";
 import { PageHeader } from "@/components/ui/page-header";
 import { ReviewList } from "@/features/reviews/review-list";
 
@@ -22,8 +20,6 @@ export default async function ReviewPage() {
     pendingClosings,
     pendingCashOuts,
     pendingCounts,
-    pendingItems,
-    pendingProducts,
   ] = await Promise.all([
     getPendingPurchases(db),
     getPendingComplimentary(db),
@@ -31,8 +27,6 @@ export default async function ReviewPage() {
     getPendingClosings(db),
     getPendingCashOuts(db),
     getPendingCounts(db),
-    getPendingInventoryItems(db),
-    getPendingProducts(db),
   ]);
 
   const totalPending =
@@ -41,9 +35,7 @@ export default async function ReviewPage() {
     pendingWaste.length +
     pendingClosings.length +
     pendingCashOuts.length +
-    pendingCounts.length +
-    pendingItems.length +
-    pendingProducts.length;
+    pendingCounts.length;
 
   return (
     <div>
@@ -62,8 +54,6 @@ export default async function ReviewPage() {
         closings={pendingClosings}
         cashOuts={pendingCashOuts}
         inventoryCounts={pendingCounts}
-        inventoryItems={pendingItems}
-        products={pendingProducts}
       />
     </div>
   );

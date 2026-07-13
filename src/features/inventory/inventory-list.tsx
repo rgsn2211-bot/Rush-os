@@ -16,9 +16,20 @@ import { EmptyState } from "@/components/ui/empty-state";
 
 interface InventoryListProps {
   items: InventoryItem[];
+  /** Section the list lives in; links are built from it. */
+  basePath?: string;
+  /** Appended to the row link (pos-manager has no detail page, so "/edit"). */
+  rowHrefSuffix?: string;
+  /** Hide the per-item stock value column (kept from the POS Manager). */
+  showStockValue?: boolean;
 }
 
-export function InventoryList({ items }: InventoryListProps) {
+export function InventoryList({
+  items,
+  basePath = "/owner/inventory",
+  rowHrefSuffix = "",
+  showStockValue = true,
+}: InventoryListProps) {
   const router = useRouter();
   const [search, setSearch] = useState("");
 
@@ -65,21 +76,22 @@ export function InventoryList({ items }: InventoryListProps) {
         );
       },
     },
-    {
-      header: "Stock value",
-      align: "right",
-      cell: (r) => (
-        <span className="font-mono font-semibold">
-          {r.stockValueFils > 0 ? formatFils(r.stockValueFils) : "—"}
-        </span>
-      ),
-    },
+    ...(showStockValue
+      ? [
+          {
+            header: "Stock value",
+            align: "right",
+            cell: (r) => (
+              <span className="font-mono font-semibold">
+                {r.stockValueFils > 0 ? formatFils(r.stockValueFils) : "—"}
+              </span>
+            ),
+          } satisfies Column<InventoryItem>,
+        ]
+      : []),
     {
       header: "Status",
       cell: (r) => {
-        if (r.status === "needs_review") {
-          return <Badge variant="amber">Needs review</Badge>;
-        }
         if (r.stockBaseQty <= r.minBaseQty && r.minBaseQty > 0) {
           return <Badge variant="red">Low</Badge>;
         }
@@ -97,7 +109,7 @@ export function InventoryList({ items }: InventoryListProps) {
         title="Inventory"
         subtitle={`${items.length} items`}
         actions={
-          <Link href="/owner/inventory/new">
+          <Link href={`${basePath}/new`}>
             <Button>Add Item</Button>
           </Link>
         }
@@ -121,7 +133,7 @@ export function InventoryList({ items }: InventoryListProps) {
           }
           action={
             !search ? (
-              <Link href="/owner/inventory/new">
+              <Link href={`${basePath}/new`}>
                 <Button>Add Item</Button>
               </Link>
             ) : undefined
@@ -132,7 +144,7 @@ export function InventoryList({ items }: InventoryListProps) {
           <DataTable
             columns={columns}
             rows={filtered}
-            onRowClick={(item) => router.push(`/owner/inventory/${item.id}`)}
+            onRowClick={(item) => router.push(`${basePath}/${item.id}${rowHrefSuffix}`)}
           />
         </Card>
       )}

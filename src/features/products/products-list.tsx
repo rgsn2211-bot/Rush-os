@@ -22,12 +22,24 @@ type ProductRow = Product & {
 interface ProductsListProps {
   products: ProductRow[];
   groups: ProductGroup[];
+  /** Section the list lives in; links are built from it. */
+  basePath?: string;
+  /** Appended to the row link (pos-manager has no detail page, so "/edit"). */
+  rowHrefSuffix?: string;
+  /** Product groups stay owner-managed; hidden for the POS Manager. */
+  showGroupsButton?: boolean;
 }
 
 // Sentinel key for products with no group; sorts after all real groups.
 const UNGROUPED = "__ungrouped__";
 
-export function ProductsList({ products, groups }: ProductsListProps) {
+export function ProductsList({
+  products,
+  groups,
+  basePath = "/owner/products",
+  rowHrefSuffix = "",
+  showGroupsButton = true,
+}: ProductsListProps) {
   const router = useRouter();
   const [search, setSearch] = useState("");
 
@@ -58,9 +70,6 @@ export function ProductsList({ products, groups }: ProductsListProps) {
         <div>
           <div className="flex items-center gap-2">
             <span className="font-semibold">{r.name}</span>
-            {r.status === "needs_review" && (
-              <Badge variant="amber">Needs review</Badge>
-            )}
           </div>
           {r.category && (
             <div className="text-ink-3 mt-0.5 text-xs">{r.category}</div>
@@ -114,10 +123,12 @@ export function ProductsList({ products, groups }: ProductsListProps) {
         subtitle={`${products.length} products · grouped by type`}
         actions={
           <div className="flex gap-2">
-            <Link href="/owner/products/groups">
-              <Button variant="secondary">Manage groups</Button>
-            </Link>
-            <Link href="/owner/products/new">
+            {showGroupsButton && (
+              <Link href="/owner/products/groups">
+                <Button variant="secondary">Manage groups</Button>
+              </Link>
+            )}
+            <Link href={`${basePath}/new`}>
               <Button>Add Product</Button>
             </Link>
           </div>
@@ -142,7 +153,7 @@ export function ProductsList({ products, groups }: ProductsListProps) {
           }
           action={
             !search ? (
-              <Link href="/owner/products/new">
+              <Link href={`${basePath}/new`}>
                 <Button>Add Product</Button>
               </Link>
             ) : undefined
@@ -162,7 +173,7 @@ export function ProductsList({ products, groups }: ProductsListProps) {
                 <DataTable
                   columns={columns}
                   rows={section.rows}
-                  onRowClick={(p) => router.push(`/owner/products/${p.id}`)}
+                  onRowClick={(p) => router.push(`${basePath}/${p.id}${rowHrefSuffix}`)}
                 />
               </Card>
             </div>

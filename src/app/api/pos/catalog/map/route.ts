@@ -1,12 +1,13 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { requireOwner } from "@/lib/auth";
+import { requireRoleApi } from "@/lib/auth";
 import { posMapItemSchema } from "@/lib/validators/pos";
 import { mapPosItem } from "@/services/pos-mapping";
 
 export async function POST(request: NextRequest) {
   const db = await createClient();
-  await requireOwner(db);
+  const auth = await requireRoleApi(db, ["owner", "pos_manager"]);
+  if (auth instanceof Response) return auth;
 
   const body = await request.json();
   const parsed = posMapItemSchema.safeParse(body);
