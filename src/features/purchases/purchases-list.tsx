@@ -16,6 +16,15 @@ interface PurchasesListProps {
   supplierNames: Record<string, string>;
 }
 
+const STAGE: Record<
+  string,
+  { label: string; variant: "default" | "amber" | "green" }
+> = {
+  ordered: { label: "Ordered", variant: "default" },
+  needs_review: { label: "Awaiting review", variant: "amber" },
+  approved: { label: "Received", variant: "green" },
+};
+
 export function PurchasesList({ purchases, supplierNames }: PurchasesListProps) {
   const router = useRouter();
 
@@ -37,10 +46,23 @@ export function PurchasesList({ purchases, supplierNames }: PurchasesListProps) 
       ),
     },
     {
+      header: "Stage",
+      cell: (r) => {
+        const s = STAGE[r.status] ?? { label: r.status, variant: "default" as const };
+        return <Badge variant={s.variant}>{s.label}</Badge>;
+      },
+    },
+    {
       header: "Total",
       align: "right",
       cell: (r) => (
-        <span className="font-mono font-semibold">{formatFils(r.totalFils)}</span>
+        <span className="font-mono font-semibold">
+          {r.status === "ordered" ? (
+            <span className="text-ink-3">~{formatFils(r.totalFils)}</span>
+          ) : (
+            formatFils(r.totalFils)
+          )}
+        </span>
       ),
     },
     {
@@ -58,10 +80,10 @@ export function PurchasesList({ purchases, supplierNames }: PurchasesListProps) 
     <div>
       <PageHeader
         title="Purchases"
-        subtitle={`${purchases.length} recorded · receiving stock updates weighted-average costs`}
+        subtitle={`${purchases.length} recorded · order, receive & pay independently`}
         actions={
           <Link href="/owner/purchases/new">
-            <Button>Receive Stock</Button>
+            <Button>New Purchase</Button>
           </Link>
         }
       />

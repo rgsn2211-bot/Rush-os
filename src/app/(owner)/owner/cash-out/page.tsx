@@ -14,7 +14,7 @@ export default async function OwnerCashOutPage() {
     <div>
       <PageHeader
         title="Register Cash Out"
-        subtitle="Review worker cash-outs; approving lowers the register balance"
+        subtitle="Review worker cash-outs. The register already dropped when recorded; rejecting refunds it."
       />
       <CashOutList cashOuts={cashOuts} />
     </div>

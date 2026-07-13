@@ -14,6 +14,7 @@ import type {
   SettlementCreateInput,
   SettlementConfirmInput,
   RecurringCostCreateInput,
+  PurchasePayInput,
 } from "@/lib/validators/money";
 import type { RecurringCost } from "@/types/money";
 import { bhdToFils } from "@/lib/calculations/currency";
@@ -192,32 +193,45 @@ export async function getApprovedPurchases(
   return all.filter((p) => p.status === "approved");
 }
 
-/** Approved + unpaid purchases — money the shop still owes suppliers. */
+/**
+ * Money the shop still owes: any live purchase (ordered, received, or approved)
+ * that is not yet paid. An order placed on credit is a payable immediately —
+ * it does not have to be received first.
+ */
 export async function getPayables(db: SupabaseClient): Promise<Purchase[]> {
-  const approved = await getApprovedPurchases(db);
-  return approved.filter((p) => !p.isPaid);
+  const all = await listPurchases(db);
+  return all.filter((p) => p.status !== "voided" && !p.isPaid);
 }
 
+/**
+ * Owner-only payment of a purchase at any stage — prepay an order, pay on
+ * delivery, or settle a credit tab. Cash leaves the account the instant this
+ * runs (posted to the ledger), so it can be paid before the goods arrive.
+ */
 export async function payPurchase(
   db: SupabaseClient,
   id: string,
-  paidMethod: "cash" | "bank",
+  input: PurchasePayInput,
   createdBy: string,
 ): Promise<void> {
   const purchase = await getPurchase(db, id);
   if (!purchase) throw new Error("Purchase not found");
-  if (purchase.isPaid) throw new Error("Purchase is already paid");
+  if (purchase.status === "voided") throw new Error("Purchase is cancelled");
+  if (purchase.paidOn !== null || purchase.isPaid) {
+    throw new Error("Purchase is already paid");
+  }
 
-  await markPurchasePaid(db, id, paidMethod);
+  const paidOn = input.paidOn ?? new Date().toISOString().split("T")[0];
+  await markPurchasePaid(db, id, input.paidMethod, paidOn);
 
-  const account = paidMethod === "cash" ? "register" : "bank";
+  const account = input.paidMethod === "cash" ? "register" : "bank";
   if (purchase.totalFils > 0) {
     await insertCashMovement(db, {
       direction: "out",
       reason: "Purchase payment",
       amountFils: purchase.totalFils,
-      method: paidMethod === "cash" ? "Cash" : "Bank transfer",
-      occurredOn: new Date().toISOString().split("T")[0],
+      method: input.paidMethod === "cash" ? "Cash" : "Bank transfer",
+      occurredOn: paidOn,
       affectsPl: false,
       account,
       sourceType: "purchase_payment",
@@ -258,71 +272,93 @@ export async function removeRecurringCost(
   return deleteRecurringCost(db, id);
 }
 
-/** Advance an ISO date by a recurring frequency. */
+/** Advance an ISO date by N steps of a recurring frequency. */
 function advanceDueDate(
   isoDate: string,
   frequency: RecurringCost["frequency"],
+  steps = 1,
 ): string {
   const d = new Date(isoDate + "T00:00:00Z");
   if (frequency === "Weekly") {
-    d.setUTCDate(d.getUTCDate() + 7);
+    d.setUTCDate(d.getUTCDate() + 7 * steps);
   } else if (frequency === "Monthly") {
-    d.setUTCMonth(d.getUTCMonth() + 1);
+    d.setUTCMonth(d.getUTCMonth() + steps);
   }
   return d.toISOString().split("T")[0];
 }
 
 /**
- * Mark a recurring cost paid: record a real expense for it, then advance the
- * next due date (Weekly/Monthly) or deactivate it (One-time). "On invoice"
- * costs keep their due date — they recur on an unknown cadence.
+ * Mark a recurring cost paid, optionally covering several upcoming periods at
+ * once (e.g. rent paid a quarter ahead).
+ *
+ * The money really leaves now, so the cash-out is dated today. But each period
+ * is booked as its own expense dated to that period's due date, so monthly P&L
+ * stays even instead of lumping a whole quarter into one month. The next due
+ * date then advances by however many periods were covered.
+ *
+ * Only Weekly/Monthly can cover more than one period; One-time and On-invoice
+ * are always a single payment (One-time also deactivates).
  */
 export async function markRecurringPaid(
   db: SupabaseClient,
   id: string,
+  periods: number,
   createdBy: string,
 ): Promise<void> {
   const cost = await getRecurringCost(db, id);
   if (!cost) throw new Error("Recurring cost not found");
 
-  const account = expenseMethodToAccount(cost.defaultMethod);
-  const spentOn = new Date().toISOString().split("T")[0];
-  const expense = await insertExpense(db, {
-    spentOn,
-    method: cost.defaultMethod,
-    account,
-    note: `${cost.name} (recurring)`,
-    totalFils: cost.amountFils,
-    createdBy,
-    lines: [
-      {
-        category: cost.costType,
-        amountFils: cost.amountFils,
-        description: cost.frequency,
-      },
-    ],
-  });
+  const recurs = cost.frequency === "Weekly" || cost.frequency === "Monthly";
+  const count = recurs ? Math.max(1, Math.floor(periods)) : 1;
 
-  if (cost.amountFils > 0) {
-    await insertCashMovement(db, {
-      direction: "out",
-      reason: `Expense — ${cost.defaultMethod}`,
-      amountFils: cost.amountFils,
+  const account = expenseMethodToAccount(cost.defaultMethod);
+  const paidToday = new Date().toISOString().split("T")[0];
+
+  for (let k = 0; k < count; k++) {
+    // Period k is booked at its own due date; the cash still leaves today.
+    const periodDate =
+      k === 0 ? cost.nextDueDate : advanceDueDate(cost.nextDueDate, cost.frequency, k);
+
+    const expense = await insertExpense(db, {
+      spentOn: periodDate,
       method: cost.defaultMethod,
-      occurredOn: spentOn,
-      affectsPl: true,
       account,
-      sourceType: "expense",
-      sourceId: expense.id,
+      note:
+        count > 1
+          ? `${cost.name} (recurring — period ${k + 1} of ${count})`
+          : `${cost.name} (recurring)`,
+      totalFils: cost.amountFils,
       createdBy,
+      lines: [
+        {
+          category: cost.costType,
+          amountFils: cost.amountFils,
+          description: cost.frequency,
+        },
+      ],
     });
+
+    if (cost.amountFils > 0) {
+      await insertCashMovement(db, {
+        direction: "out",
+        reason: `Expense — ${cost.defaultMethod}`,
+        amountFils: cost.amountFils,
+        method: cost.defaultMethod,
+        occurredOn: paidToday,
+        affectsPl: true,
+        account,
+        sourceType: "expense",
+        sourceId: expense.id,
+        createdBy,
+      });
+    }
   }
 
   if (cost.frequency === "One-time") {
     await updateRecurringCost(db, id, { active: false });
-  } else if (cost.frequency === "Weekly" || cost.frequency === "Monthly") {
+  } else if (recurs) {
     await updateRecurringCost(db, id, {
-      nextDueDate: advanceDueDate(cost.nextDueDate, cost.frequency),
+      nextDueDate: advanceDueDate(cost.nextDueDate, cost.frequency, count),
     });
   }
 }

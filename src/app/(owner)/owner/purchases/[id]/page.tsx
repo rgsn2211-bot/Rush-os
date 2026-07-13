@@ -9,6 +9,16 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { VoidPurchaseButton } from "@/features/purchases/void-purchase-button";
+import { PurchaseActions } from "@/features/purchases/purchase-actions";
+
+const STAGE: Record<
+  string,
+  { label: string; variant: "default" | "amber" | "green" }
+> = {
+  ordered: { label: "Ordered", variant: "default" },
+  needs_review: { label: "Awaiting review", variant: "amber" },
+  approved: { label: "Received", variant: "green" },
+};
 
 export default async function PurchaseDetailPage({
   params,
@@ -31,6 +41,27 @@ export default async function PurchaseDetailPage({
     getAllItems(db),
   ]);
   const itemNames = new Map(inventoryItems.map((i) => [i.id, i]));
+  const stage = STAGE[purchase.status] ?? {
+    label: purchase.status,
+    variant: "default" as const,
+  };
+  const isOrdered = purchase.status === "ordered";
+
+  const receiveLines = items.map((pi) => {
+    const item = itemNames.get(pi.inventoryItemId);
+    return {
+      purchaseItemId: pi.id,
+      name: item?.name ?? "Item",
+      purchaseUnit: item?.purchaseUnit ?? "unit",
+      baseUnit: item?.baseUnit ?? "",
+      unitsPerPurchase: item?.unitsPerPurchase ?? 1,
+      basePerStock: item?.basePerStock ?? 1,
+      expiry: item?.expiry ?? ("not_needed" as const),
+      expectedQty: pi.purchaseQty,
+      expectedUnitCostFils: pi.unitCostFils,
+      expiryDate: pi.expiryDate,
+    };
+  });
 
   return (
     <div>
@@ -50,7 +81,9 @@ export default async function PurchaseDetailPage({
       <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
         <Card className="p-0">
           <div className="border-line-2 border-b px-5 py-4">
-            <h2 className="text-base font-bold">Items received</h2>
+            <h2 className="text-base font-bold">
+              {isOrdered ? "Items ordered (expected)" : "Items received"}
+            </h2>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -103,7 +136,9 @@ export default async function PurchaseDetailPage({
             </table>
           </div>
           <div className="bg-bg border-line-2 flex items-center justify-between border-t px-5 py-4">
-            <span className="text-[14.5px] font-bold">Purchase total</span>
+            <span className="text-[14.5px] font-bold">
+              {isOrdered ? "Expected total" : "Purchase total"}
+            </span>
             <span className="font-mono text-base font-bold">
               {formatFils(purchase.totalFils)}{" "}
               <span className="text-ink-3 text-xs">BHD</span>
@@ -111,44 +146,76 @@ export default async function PurchaseDetailPage({
           </div>
         </Card>
 
-        <Card className="lg:sticky lg:top-20">
-          <CardContent>
-            <h3 className="mb-3 text-[15px] font-bold">Details</h3>
-            <div className="flex flex-col gap-2.5 text-sm">
-              <div className="flex justify-between">
-                <span className="text-ink-2">Date</span>
-                <span className="font-semibold">
-                  {new Date(purchase.purchasedOn).toLocaleDateString()}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-ink-2">Supplier</span>
-                <span className="font-semibold">
-                  {supplier ? supplier.name : "—"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-ink-2">Payment</span>
-                {purchase.isPaid ? (
-                  <Badge variant="green">Paid</Badge>
-                ) : (
-                  <Badge variant="amber">Unpaid</Badge>
-                )}
-              </div>
-              {!purchase.isPaid && purchase.dueDate && (
+        <div className="flex flex-col gap-5 lg:sticky lg:top-20 lg:self-start">
+          <PurchaseActions
+            purchaseId={purchase.id}
+            status={purchase.status}
+            isPaid={purchase.isPaid}
+            prepaid={purchase.paidOn !== null}
+            lines={receiveLines}
+          />
+
+          <Card>
+            <CardContent>
+              <h3 className="mb-3 text-[15px] font-bold">Details</h3>
+              <div className="flex flex-col gap-2.5 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-ink-2">Stage</span>
+                  <Badge variant={stage.variant}>{stage.label}</Badge>
+                </div>
                 <div className="flex justify-between">
-                  <span className="text-ink-2">Due</span>
+                  <span className="text-ink-2">
+                    {isOrdered ? "Ordered" : "Date"}
+                  </span>
                   <span className="font-semibold">
-                    {new Date(purchase.dueDate).toLocaleDateString()}
+                    {new Date(purchase.purchasedOn).toLocaleDateString()}
                   </span>
                 </div>
-              )}
-            </div>
-            <div className="text-ink-3 border-line-2 mt-4 border-t pt-3 text-xs">
-              Recorded {new Date(purchase.createdAt).toLocaleDateString()}
-            </div>
-          </CardContent>
-        </Card>
+                <div className="flex justify-between">
+                  <span className="text-ink-2">Supplier</span>
+                  <span className="font-semibold">
+                    {supplier ? supplier.name : "—"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-ink-2">Payment</span>
+                  {purchase.isPaid ? (
+                    <Badge variant="green">Paid</Badge>
+                  ) : (
+                    <Badge variant="amber">Unpaid</Badge>
+                  )}
+                </div>
+                {purchase.isPaid && purchase.paidOn && (
+                  <div className="flex justify-between">
+                    <span className="text-ink-2">Paid on</span>
+                    <span className="font-semibold">
+                      {new Date(purchase.paidOn).toLocaleDateString()}
+                    </span>
+                  </div>
+                )}
+                {!purchase.isPaid && purchase.dueDate && (
+                  <div className="flex justify-between">
+                    <span className="text-ink-2">Due</span>
+                    <span className="font-semibold">
+                      {new Date(purchase.dueDate).toLocaleDateString()}
+                    </span>
+                  </div>
+                )}
+                {purchase.receivedOn && (
+                  <div className="flex justify-between">
+                    <span className="text-ink-2">Received</span>
+                    <span className="font-semibold">
+                      {new Date(purchase.receivedOn).toLocaleDateString()}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <div className="text-ink-3 border-line-2 mt-4 border-t pt-3 text-xs">
+                Recorded {new Date(purchase.createdAt).toLocaleDateString()}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

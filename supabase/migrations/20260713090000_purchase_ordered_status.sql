@@ -1,0 +1,21 @@
+-- ============================================================================
+-- Rush OS — Purchases become three independent facts (Ordered / Paid / Received)
+--
+-- Part 1 of 2: add the new 'ordered' lifecycle value to review_status.
+--
+-- Postgres will not let a new enum value be USED in the same transaction that
+-- adds it, so this ALTER TYPE lives alone in its own migration. The columns,
+-- policies, trigger, and views that reference 'ordered' land in the next
+-- migration (…100000_purchase_lifecycle.sql), which runs in a later
+-- transaction.
+--
+-- Lifecycle on the purchases.status column (still review_status):
+--   ordered      — logged, nothing received, no cash, no review gate (NEW)
+--   needs_review — a receipt was submitted, awaiting owner approval
+--   approved     — receipt approved, stock updated (weighted-average)
+--   voided       — cancelled (audit record kept)
+-- Every other table that uses review_status (suppliers, inventory_items,
+-- products, waste_logs, …) simply never sets 'ordered'.
+-- ============================================================================
+
+ALTER TYPE review_status ADD VALUE IF NOT EXISTS 'ordered' BEFORE 'approved';

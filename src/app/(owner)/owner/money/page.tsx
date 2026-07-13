@@ -5,10 +5,12 @@ import {
   getAllExpenses,
   getAllCashMovements,
   getApprovedPurchases,
+  getPayables,
   getAllSettlements,
   getCashFlowProjection,
   getAllRecurringCosts,
 } from "@/services/money";
+import type { Purchase } from "@/types/inventory";
 import { getAllSuppliers } from "@/services/suppliers";
 import { MoneyDashboard } from "@/features/money/money-dashboard";
 import type { PurchaseRow } from "@/features/money/types";
@@ -22,6 +24,7 @@ export default async function MoneyPage() {
     expenses,
     cashMovements,
     purchases,
+    payables,
     suppliers,
     settlements,
     projection,
@@ -31,6 +34,7 @@ export default async function MoneyPage() {
     getAllExpenses(db),
     getAllCashMovements(db),
     getApprovedPurchases(db),
+    getPayables(db),
     getAllSuppliers(db),
     getAllSettlements(db),
     getCashFlowProjection(db),
@@ -38,7 +42,7 @@ export default async function MoneyPage() {
   ]);
 
   const supplierNames = new Map(suppliers.map((s) => [s.id, s.name]));
-  const purchaseRows: PurchaseRow[] = purchases.map((p) => ({
+  const toRow = (p: Purchase): PurchaseRow => ({
     id: p.id,
     supplierName: p.supplierId
       ? supplierNames.get(p.supplierId) ?? "Unknown supplier"
@@ -48,14 +52,16 @@ export default async function MoneyPage() {
     paidMethod: p.paidMethod,
     dueDate: p.dueDate,
     totalFils: p.totalFils,
-  }));
+    status: p.status,
+  });
 
   return (
     <MoneyDashboard
       summary={summary}
       expenses={expenses}
       cashMovements={cashMovements}
-      purchases={purchaseRows}
+      purchases={purchases.map(toRow)}
+      payables={payables.map(toRow)}
       settlements={settlements}
       projection={projection}
       recurringCosts={recurringCosts}
