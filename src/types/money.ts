@@ -129,6 +129,49 @@ export interface Settlement {
   updatedAt: string;
 }
 
+export type SettlementPaymentKind = "payout" | "commission";
+/** Channels that use the running-total settlement ledger (not BenefitPay). */
+export type LedgerChannel = "card" | "delivery";
+
+/**
+ * A single owner-recorded settlement entry against a channel's pooled total:
+ * a payout received (money in) or a commission kept by the provider.
+ */
+export interface SettlementPayment {
+  id: string;
+  channel: LedgerChannel;
+  /** Delivery platform; null for card. */
+  platform: string | null;
+  kind: SettlementPaymentKind;
+  amountFils: number;
+  /** payout: date the money was received. */
+  receivedOn: string | null;
+  /** commission: date range the fee applies to. */
+  periodFrom: string | null;
+  periodTo: string | null;
+  /** commission: owner-picked label for the fee. */
+  feeType: string | null;
+  note: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Running-total view for one channel (and platform, for delivery):
+ * shouldHave − received − commission = stillOwed.
+ */
+export interface SettlementLedger {
+  channel: LedgerChannel;
+  /** Delivery platform; null for card (single ledger). */
+  platform: string | null;
+  shouldHaveFils: number;
+  receivedFils: number;
+  commissionFils: number;
+  stillOwedFils: number;
+  payments: SettlementPayment[];
+}
+
 /** Projected cash position used by the Cash Flow tab. */
 export interface CashFlowProjection {
   availableNowFils: number;

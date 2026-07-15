@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type {
   Settlement,
   SettlementChannel,
+  SettlementLedger,
   CashFlowProjection,
 } from "@/types/money";
 import { formatFils } from "@/lib/calculations/currency";
@@ -14,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/ui/empty-state";
+import { SettlementLedger as SettlementLedgerView } from "@/features/money/settlement-ledger";
 import { Plus, Check, Trash2 } from "lucide-react";
 
 const CHANNELS: { v: SettlementChannel; label: string }[] = [
@@ -23,23 +25,27 @@ const CHANNELS: { v: SettlementChannel; label: string }[] = [
 ];
 
 const CHANNEL_NOTE: Record<SettlementChannel, string> = {
-  card: "Card settles with a short delay and a processing fee deducted before payout.",
+  card: "Card pays in lump sums that don't map to days. Record each payout received and enter the commission taken; the difference is tracked as a running total.",
   benefitpay:
     "BenefitPay goes directly to the bank with no fee — confirm received to reconcile.",
   delivery:
-    "Delivery apps settle monthly. Commission and fixed fees are deducted before payout.",
+    "Delivery apps pay per platform. Record payouts received and the commission taken; the running total shows what's still owed.",
 };
 
 export function CashFlowView({
   settlements,
+  ledgers,
   projection,
   onNew,
 }: {
   settlements: Settlement[];
+  ledgers: SettlementLedger[];
   projection: CashFlowProjection;
   onNew: () => void;
 }) {
   const [channel, setChannel] = useState<SettlementChannel>("card");
+  // Card & delivery use the running-total ledger; BenefitPay keeps per-row confirm.
+  const usesLedger = channel === "card" || channel === "delivery";
   const rows = settlements.filter((s) => s.channel === channel);
 
   return (
@@ -70,13 +76,17 @@ export function CashFlowView({
             </button>
           ))}
         </div>
-        <Button size="sm" onClick={onNew}>
-          <Plus size={15} className="mr-1" />
-          Add Settlement
-        </Button>
+        {!usesLedger && (
+          <Button size="sm" onClick={onNew}>
+            <Plus size={15} className="mr-1" />
+            Add Settlement
+          </Button>
+        )}
       </div>
 
-      {rows.length === 0 ? (
+      {channel === "card" || channel === "delivery" ? (
+        <SettlementLedgerView channel={channel} ledgers={ledgers} />
+      ) : rows.length === 0 ? (
         <EmptyState message="No settlements recorded for this channel." />
       ) : (
         <Card className="p-0">
