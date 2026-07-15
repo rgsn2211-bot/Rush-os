@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { DeliveryPlatform } from "@/types/delivery";
-import type { Settlement } from "@/types/money";
+import type { Settlement, SettlementLedger } from "@/types/money";
 import { formatFils } from "@/lib/calculations/currency";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/card";
@@ -10,12 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PlatformForm } from "@/features/delivery/platform-form";
-import { SettlementReconcile } from "@/features/delivery/settlement-reconcile";
+import { SettlementLedger as SettlementLedgerView } from "@/features/money/settlement-ledger";
 import { Plus, Pencil } from "lucide-react";
 
 interface Props {
   platforms: DeliveryPlatform[];
   settlements: Settlement[];
+  ledgers: SettlementLedger[];
 }
 
 type Tab = "settings" | "report" | "settlement";
@@ -26,7 +27,7 @@ const TABS: { v: Tab; label: string }[] = [
   { v: "settlement", label: "Settlement" },
 ];
 
-export function DeliveryDashboard({ platforms, settlements }: Props) {
+export function DeliveryDashboard({ platforms, settlements, ledgers }: Props) {
   const [tab, setTab] = useState<Tab>("settings");
   const [editing, setEditing] = useState<DeliveryPlatform | null>(null);
   const [adding, setAdding] = useState(false);
@@ -67,7 +68,7 @@ export function DeliveryDashboard({ platforms, settlements }: Props) {
       )}
       {tab === "report" && <Report settlements={settlements} />}
       {tab === "settlement" && (
-        <SettlementReconcile settlements={settlements} />
+        <SettlementLedgerView channel="delivery" ledgers={ledgers} />
       )}
     </div>
   );

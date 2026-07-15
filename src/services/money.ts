@@ -13,10 +13,17 @@ import type {
   CashTransferInput,
   SettlementCreateInput,
   SettlementConfirmInput,
+  SettlementPayoutInput,
+  SettlementCommissionInput,
   RecurringCostCreateInput,
   PurchasePayInput,
 } from "@/lib/validators/money";
-import type { RecurringCost } from "@/types/money";
+import type {
+  RecurringCost,
+  SettlementLedger,
+  SettlementPayment,
+  LedgerChannel,
+} from "@/types/money";
 import { bhdToFils } from "@/lib/calculations/currency";
 import {
   insertExpense,
@@ -53,6 +60,12 @@ import {
   updateRecurringCost,
   deleteRecurringCost,
 } from "@/repositories/recurring-costs";
+import {
+  insertSettlementPayment,
+  listSettlementPayments,
+  getSettlementPayment,
+  deleteSettlementPayment,
+} from "@/repositories/settlement-payments";
 
 // ---------- Expenses --------------------------------------------------------
 
@@ -491,19 +504,176 @@ export async function removeSettlement(
   return deleteSettlement(db, id);
 }
 
+// ---------- Settlement payments ledger (card + delivery) --------------------
+//
+// Card / delivery payouts arrive in lump sums with no per-day breakdown, so
+// the owner tracks a running total per channel instead of settling day-by-day:
+//   still owed = should have (pooled pending expected) − received − commission.
+// A payout records money that arrived (posts a bank cash-in); a commission
+// records the fee the provider kept (no cash moves). Both draw down still-owed.
+
+/** Record a payout received — posts the money into the bank. */
+export async function recordPayout(
+  db: SupabaseClient,
+  input: SettlementPayoutInput,
+  createdBy: string,
+): Promise<SettlementPayment> {
+  const amountFils = bhdToFils(input.amountBhd);
+  const payment = await insertSettlementPayment(db, {
+    channel: input.channel,
+    platform: input.platform ?? null,
+    kind: "payout",
+    amountFils,
+    receivedOn: input.receivedOn,
+    note: input.note ?? null,
+    createdBy,
+  });
+
+  if (amountFils > 0) {
+    await insertCashMovement(db, {
+      direction: "in",
+      reason: `Settlement payout — ${input.platform ?? input.channel}`,
+      amountFils,
+      method: "Bank transfer",
+      occurredOn: input.receivedOn,
+      affectsPl: false,
+      account: "bank",
+      sourceType: "settlement_payout",
+      sourceId: payment.id,
+      createdBy,
+    });
+  }
+
+  return payment;
+}
+
+/** Record commission kept by the provider — reduces still-owed, no cash moves. */
+export async function recordCommission(
+  db: SupabaseClient,
+  input: SettlementCommissionInput,
+  createdBy: string,
+): Promise<SettlementPayment> {
+  return insertSettlementPayment(db, {
+    channel: input.channel,
+    platform: input.platform ?? null,
+    kind: "commission",
+    amountFils: bhdToFils(input.amountBhd),
+    periodFrom: input.periodFrom,
+    periodTo: input.periodTo,
+    feeType: input.feeType ?? null,
+    note: input.note ?? null,
+    createdBy,
+  });
+}
+
+/** Delete a ledger entry; for payouts, reverse the bank cash-in. */
+export async function removeSettlementPayment(
+  db: SupabaseClient,
+  id: string,
+): Promise<void> {
+  const existing = await getSettlementPayment(db, id);
+  if (!existing) throw new Error("Settlement entry not found");
+  await deleteSettlementPayment(db, id);
+  if (existing.kind === "payout") {
+    await deleteCashMovementsBySource(db, "settlement_payout", id);
+  }
+}
+
+/**
+ * Build the running-total ledgers for card and each delivery platform. The
+ * pooled "should have" comes from the still-pending per-day settlements (which
+ * are computed from the configured commission at EOD); received and commission
+ * come from the owner's recorded ledger entries.
+ */
+export async function getSettlementLedgers(
+  db: SupabaseClient,
+): Promise<SettlementLedger[]> {
+  const [settlements, payments] = await Promise.all([
+    listSettlements(db),
+    listSettlementPayments(db),
+  ]);
+
+  const key = (channel: LedgerChannel, platform: string | null) =>
+    `${channel}::${platform ?? ""}`;
+
+  const ledgers = new Map<string, SettlementLedger>();
+  const ensure = (channel: LedgerChannel, platform: string | null) => {
+    const k = key(channel, platform);
+    let l = ledgers.get(k);
+    if (!l) {
+      l = {
+        channel,
+        platform,
+        shouldHaveFils: 0,
+        receivedFils: 0,
+        commissionFils: 0,
+        stillOwedFils: 0,
+        payments: [],
+      };
+      ledgers.set(k, l);
+    }
+    return l;
+  };
+
+  // Pooled "should have": pending card/delivery settlements only.
+  for (const s of settlements) {
+    if (s.status !== "pending") continue;
+    if (s.channel !== "card" && s.channel !== "delivery") continue;
+    const platform = s.channel === "delivery" ? s.platform : null;
+    ensure(s.channel, platform).shouldHaveFils += s.expectedFils;
+  }
+
+  // Received / commission from recorded entries.
+  for (const p of payments) {
+    const platform = p.channel === "delivery" ? p.platform : null;
+    const l = ensure(p.channel, platform);
+    if (p.kind === "payout") l.receivedFils += p.amountFils;
+    else l.commissionFils += p.amountFils;
+    l.payments.push(p);
+  }
+
+  for (const l of ledgers.values()) {
+    l.stillOwedFils = l.shouldHaveFils - l.receivedFils - l.commissionFils;
+  }
+
+  return [...ledgers.values()].sort(
+    (a, b) =>
+      a.channel.localeCompare(b.channel) ||
+      (a.platform ?? "").localeCompare(b.platform ?? ""),
+  );
+}
+
 /**
  * Projected cash: what's in the till now (cash log net), plus money owed to us
- * by providers (pending settlements), minus what we owe suppliers (payables).
- * Cash flow follows money received/paid — not sales dates.
+ * by providers, minus what we owe suppliers (payables). Cash flow follows money
+ * received/paid — not sales dates.
+ *
+ * Card/delivery pending settlements no longer self-clear (they're the pooled
+ * "should have"), so we swap their gross pending sum for the net still-owed from
+ * the ledgers. What's left in the raw pending sum is BenefitPay, which still
+ * self-clears on confirm.
  */
 export async function getCashFlowProjection(
   db: SupabaseClient,
 ): Promise<CashFlowProjection> {
-  const [availableNowFils, expectedIncomingFils, payables] = await Promise.all([
-    getCashPosition(db),
-    sumPendingSettlements(db),
-    getPayables(db),
-  ]);
+  const [availableNowFils, pendingAllFils, ledgers, payables] =
+    await Promise.all([
+      getCashPosition(db),
+      sumPendingSettlements(db),
+      getSettlementLedgers(db),
+      getPayables(db),
+    ]);
+
+  const cardDeliveryPendingFils = ledgers.reduce(
+    (sum, l) => sum + l.shouldHaveFils,
+    0,
+  );
+  const cardDeliveryOwedFils = ledgers.reduce(
+    (sum, l) => sum + Math.max(0, l.stillOwedFils),
+    0,
+  );
+  const expectedIncomingFils =
+    pendingAllFils - cardDeliveryPendingFils + cardDeliveryOwedFils;
 
   const upcomingOutgoingFils = payables.reduce(
     (sum, p) => sum + p.totalFils,

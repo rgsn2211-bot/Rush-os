@@ -7,6 +7,7 @@ import {
   getApprovedPurchases,
   getPayables,
   getAllSettlements,
+  getSettlementLedgers,
   getCashFlowProjection,
   getAllRecurringCosts,
 } from "@/services/money";
@@ -27,6 +28,7 @@ export default async function MoneyPage() {
     payables,
     suppliers,
     settlements,
+    ledgers,
     projection,
     recurringCosts,
   ] = await Promise.all([
@@ -37,6 +39,7 @@ export default async function MoneyPage() {
     getPayables(db),
     getAllSuppliers(db),
     getAllSettlements(db),
+    getSettlementLedgers(db),
     getCashFlowProjection(db),
     getAllRecurringCosts(db),
   ]);
@@ -63,6 +66,7 @@ export default async function MoneyPage() {
       purchases={purchases.map(toRow)}
       payables={payables.map(toRow)}
       settlements={settlements}
+      ledgers={ledgers}
       projection={projection}
       recurringCosts={recurringCosts}
     />
