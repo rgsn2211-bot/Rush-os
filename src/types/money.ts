@@ -69,6 +69,23 @@ export interface CashMovement {
   updatedAt: string;
 }
 
+/**
+ * One book-to-actual balance check. diff = actual − expected (signed);
+ * a non-zero diff also posts a linked cash_movement
+ * (source_type 'balance_adjustment') that brings the account to actual.
+ */
+export interface BalanceAdjustment {
+  id: string;
+  account: CashAccount;
+  expectedFils: number;
+  actualFils: number;
+  diffFils: number;
+  note: string | null;
+  occurredOn: string;
+  createdBy: string | null;
+  createdAt: string;
+}
+
 export type RecurringFrequency =
   | "Monthly"
   | "Weekly"

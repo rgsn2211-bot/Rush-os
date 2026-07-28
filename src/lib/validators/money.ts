@@ -121,3 +121,17 @@ export const cashTransferSchema = z.object({
   note: z.string().trim().optional(),
 });
 export type CashTransferInput = z.infer<typeof cashTransferSchema>;
+
+/**
+ * Owner reconciles an account to what was physically counted. The expected
+ * balance is recomputed server-side at confirm time — only the counted actual
+ * comes from the client.
+ */
+export const balanceAdjustmentSchema = z.object({
+  account: z.enum(["register", "bank"]),
+  actualBhd: moneyBhd,
+  occurredOn: dateStr,
+  affectsPl: z.boolean().default(true),
+  note: z.string().trim().optional(),
+});
+export type BalanceAdjustmentInput = z.infer<typeof balanceAdjustmentSchema>;
