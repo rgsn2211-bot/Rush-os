@@ -54,6 +54,23 @@ export async function listCashMovements(
   return data.map(toCashMovement);
 }
 
+/** Movements the owner marked as affecting P&L, in [from, to). */
+export async function listPlMovementsBetween(
+  db: SupabaseClient,
+  fromInclusive: string,
+  toExclusive: string,
+): Promise<CashMovement[]> {
+  const { data, error } = await db
+    .from("cash_movements")
+    .select("*")
+    .eq("affects_pl", true)
+    .gte("occurred_on", fromInclusive)
+    .lt("occurred_on", toExclusive);
+
+  if (error) throw error;
+  return data.map(toCashMovement);
+}
+
 export async function deleteCashMovement(
   db: SupabaseClient,
   id: string,
@@ -160,6 +177,8 @@ function toCashMovement(row: any): CashMovement {
     occurredOn: row.occurred_on,
     affectsPl: row.affects_pl,
     account: row.account ?? "register",
+    sourceType: row.source_type ?? null,
+    sourceId: row.source_id ?? null,
     note: row.note,
     createdBy: row.created_by,
     createdAt: row.created_at,

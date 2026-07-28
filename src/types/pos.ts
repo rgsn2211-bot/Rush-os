@@ -62,6 +62,11 @@ export interface ComplimentaryLog {
   id: string;
   description: string;
   amountFils: number;
+  /**
+   * Recipe cost of the product at approval time, in fils (0 for free-text
+   * "Other" entries). An attribution inside POS COGS — never deducted again.
+   */
+  costFils: number;
   reason: string;
   notes: string | null;
   productId: string | null;

@@ -51,6 +51,27 @@ export async function listSettlementPayments(
   return data.map(toSettlementPayment);
 }
 
+/**
+ * Recorded commission entries whose period ends in [fromInclusive,
+ * toExclusive). Used by profit reports for fees that have no configured
+ * accrual (card / BenefitPay processor fees).
+ */
+export async function listCommissionEntriesBetween(
+  db: SupabaseClient,
+  fromInclusive: string,
+  toExclusive: string,
+): Promise<SettlementPayment[]> {
+  const { data, error } = await db
+    .from("settlement_payments")
+    .select("*")
+    .eq("kind", "commission")
+    .gte("period_to", fromInclusive)
+    .lt("period_to", toExclusive);
+
+  if (error) throw error;
+  return data.map(toSettlementPayment);
+}
+
 export async function getSettlementPayment(
   db: SupabaseClient,
   id: string,

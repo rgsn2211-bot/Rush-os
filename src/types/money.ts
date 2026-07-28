@@ -60,6 +60,9 @@ export interface CashMovement {
   occurredOn: string;
   affectsPl: boolean;
   account: CashAccount;
+  /** Feature that posted this movement (e.g. "expense"); null for manual. */
+  sourceType: string | null;
+  sourceId: string | null;
   note: string | null;
   createdBy: string | null;
   createdAt: string;
