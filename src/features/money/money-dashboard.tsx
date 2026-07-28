@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type {
   MoneySummary,
@@ -378,15 +379,20 @@ function PurchaseTable({
             i > 0 ? "border-line-2 border-t" : ""
           }`}
         >
-          <div className="min-w-0 flex-1">
-            <div className="text-[15px] font-bold">{p.supplierName}</div>
+          <Link
+            href={`/owner/purchases/${p.id}`}
+            className="group min-w-0 flex-1"
+          >
+            <div className="text-[15px] font-bold group-hover:text-navy">
+              {p.supplierName}
+            </div>
             <div className="text-ink-3 text-[13px]">
               {p.purchasedOn}
               {showStage && PAYABLE_STAGE[p.status]
                 ? ` · ${PAYABLE_STAGE[p.status]}`
                 : ""}
             </div>
-          </div>
+          </Link>
           {p.isPaid ? (
             <Badge variant="green">
               Paid{p.paidMethod ? ` (${p.paidMethod})` : ""}
