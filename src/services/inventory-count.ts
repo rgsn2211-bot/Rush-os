@@ -19,8 +19,13 @@ import {
   enrichInventoryCountItems,
 } from "@/repositories/inventory-counts";
 import { getInventoryItem, adjustStock } from "@/repositories/inventory-items";
+import {
+  insertUsageRows,
+  type InsertInventoryUsageInput,
+} from "@/repositories/inventory-usage";
 import { listInventoryItemsOps } from "@/repositories/worker-inventory";
 import { reconcileCount } from "@/lib/calculations/costing";
+import { todayInBahrain } from "@/lib/dates";
 
 /**
  * Worker submits a physical stock count. Each line's quantity arrives in the
@@ -151,9 +156,16 @@ export async function reviewCount(
   }
 
   const lines = await getInventoryCountItems(db, id);
+  const usageRows: InsertInventoryUsageInput[] = [];
+  const occurredOn = todayInBahrain();
+
   for (const line of lines) {
     const item = await getInventoryItem(db, line.inventoryItemId);
     if (!item) continue; // item voided/removed since submission — skip its line
+
+    // Reconcile against the LIVE on-hand (stock may have drifted since the
+    // worker snapshotted the expected amount) — the physical count wins.
+    const liveVarianceBaseQty = line.countedBaseQty - item.stockBaseQty;
 
     const { state, varianceFils } = reconcileCount(
       { baseQty: item.stockBaseQty, valueFils: item.stockValueFils },
@@ -163,7 +175,21 @@ export async function reviewCount(
 
     await adjustStock(db, item.id, state.baseQty, state.valueFils);
     await updateInventoryCountItemValue(db, line.id, varianceFils);
+
+    // Ledger convention: shrinkage (stock lost) is positive consumed qty and
+    // positive cost; an overage is negative (stock gained back value).
+    if (liveVarianceBaseQty !== 0) {
+      usageRows.push({
+        occurredOn,
+        sourceType: "count",
+        sourceId: id,
+        inventoryItemId: item.id,
+        qtyBase: -liveVarianceBaseQty,
+        cogsFils: -varianceFils,
+      });
+    }
   }
 
+  await insertUsageRows(db, usageRows);
   await updateInventoryCountStatus(db, id, "approved", reviewedBy);
 }

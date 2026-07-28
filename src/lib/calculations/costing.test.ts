@@ -4,6 +4,7 @@ import {
   receiveStock,
   averageUnitCostFils,
   consumeStock,
+  consumeStockAllowNegative,
   reconcileCount,
   recipeCostFils,
   grossMargin,
@@ -122,6 +123,72 @@ describe("inventory count reconciliation", () => {
 
   it("rejects a negative counted quantity", () => {
     expect(() => reconcileCount(empty, -1, 0)).toThrow();
+  });
+});
+
+describe("consumeStockAllowNegative", () => {
+  it("behaves exactly like consumeStock while stock covers the quantity", () => {
+    const current: StockState = { baseQty: 100, valueFils: 5000 };
+    const a = consumeStockAllowNegative(current, 40, 999);
+    const b = consumeStock(current, 40);
+    expect(a).toEqual(b);
+  });
+
+  it("goes negative past on-hand: empties value exactly, costs shortfall at fallback", () => {
+    // 10 on hand worth 500 (avg 50); consume 25 with fallback 60/unit.
+    const { state, cogsFils } = consumeStockAllowNegative(
+      { baseQty: 10, valueFils: 500 },
+      25,
+      60,
+    );
+    expect(cogsFils).toBe(500 + 15 * 60); // 1400
+    expect(state.baseQty).toBe(-15);
+    expect(state.valueFils).toBe(-900); // invariant: value = fallback x qty
+  });
+
+  it("receiving after negative self-corrects the average", () => {
+    const negative: StockState = { baseQty: -15, valueFils: -900 };
+    const next = receiveStock(negative, 20, 1200); // 20 units @ 60
+    expect(next.baseQty).toBe(5);
+    expect(next.valueFils).toBe(300); // clean 60/unit again
+    expect(averageUnitCostFils(next)).toBe(60);
+  });
+
+  it("consumes entirely at fallback when stock is already zero or negative", () => {
+    const fromZero = consumeStockAllowNegative(
+      { baseQty: 0, valueFils: 0 },
+      8,
+      75,
+    );
+    expect(fromZero.cogsFils).toBe(600);
+    expect(fromZero.state).toEqual({ baseQty: -8, valueFils: -600 });
+
+    const fromNegative = consumeStockAllowNegative(
+      { baseQty: -5, valueFils: -300 },
+      10,
+      60,
+    );
+    expect(fromNegative.cogsFils).toBe(600);
+    expect(fromNegative.state).toEqual({ baseQty: -15, valueFils: -900 });
+  });
+
+  it("rounds the shortfall cost once (no per-unit rounding drift)", () => {
+    // Shortfall of 3 units at 33.4 fils -> round(100.2) = 100, not 3 x 33.
+    const { cogsFils } = consumeStockAllowNegative(
+      { baseQty: 0, valueFils: 0 },
+      3,
+      33.4,
+    );
+    expect(cogsFils).toBe(100);
+  });
+
+  it("rejects non-positive quantity and negative fallback cost", () => {
+    expect(() =>
+      consumeStockAllowNegative({ baseQty: 5, valueFils: 100 }, 0, 10),
+    ).toThrow();
+    expect(() =>
+      consumeStockAllowNegative({ baseQty: 5, valueFils: 100 }, 1, -1),
+    ).toThrow();
   });
 });
 

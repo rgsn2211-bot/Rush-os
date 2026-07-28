@@ -17,8 +17,15 @@ import {
   upsertPosItemCatalog,
 } from "@/repositories/pos-catalog";
 import { getRecipeIngredients, getProduct } from "@/repositories/products";
+import { listProductGroups } from "@/repositories/product-groups";
 import { getInventoryItem, adjustStock } from "@/repositories/inventory-items";
-import { consumeStock } from "@/lib/calculations/costing";
+import {
+  insertUsageRows,
+  deleteUsageBySource,
+  type InsertInventoryUsageInput,
+} from "@/repositories/inventory-usage";
+import { consumeStockAllowNegative } from "@/lib/calculations/costing";
+import { fallbackUnitCostFils } from "@/services/inventory-costing";
 
 async function computeFileHash(buffer: ArrayBuffer): Promise<string> {
   const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
@@ -183,51 +190,118 @@ export async function processImportInventory(
   const salesRows = await listPosSalesRows(db, importId);
   const mappedRows = salesRows.filter((r) => r.status === "mapped" && r.productId);
 
-  const aggregatedUsage = new Map<string, number>();
+  // Aggregate usage per inventory item, keeping the per-product split so the
+  // usage ledger can attribute COGS to products and product groups. Products
+  // and recipes are cached — several POS lines can map to the same product.
+  const productCache = new Map<string, Awaited<ReturnType<typeof getProduct>>>();
+  const recipeCache = new Map<
+    string,
+    Awaited<ReturnType<typeof getRecipeIngredients>>
+  >();
+  const perItemUsage = new Map<string, Map<string, number>>();
 
   for (const row of mappedRows) {
+    const productId = row.productId!;
+
     // Safeguard: a product the owner rejected (voided) must never deduct stock,
     // even if it was previously mapped to this POS line.
-    const product = await getProduct(db, row.productId!);
+    let product = productCache.get(productId);
+    if (product === undefined) {
+      product = await getProduct(db, productId);
+      productCache.set(productId, product);
+    }
     if (product && product.status === "voided") continue;
 
-    const recipe = await getRecipeIngredients(db, row.productId!);
+    let recipe = recipeCache.get(productId);
+    if (recipe === undefined) {
+      recipe = await getRecipeIngredients(db, productId);
+      recipeCache.set(productId, recipe);
+    }
+
     for (const ing of recipe) {
-      const key = ing.inventoryItemId;
-      const totalQty = ing.qtyBase * row.qtySold;
-      aggregatedUsage.set(key, (aggregatedUsage.get(key) ?? 0) + totalQty);
+      let portions = perItemUsage.get(ing.inventoryItemId);
+      if (!portions) {
+        portions = new Map<string, number>();
+        perItemUsage.set(ing.inventoryItemId, portions);
+      }
+      const qty = ing.qtyBase * row.qtySold;
+      portions.set(productId, (portions.get(productId) ?? 0) + qty);
     }
   }
 
-  const deductions: DeductionItem[] = [];
+  const groups = await listProductGroups(db);
+  const groupNames = new Map(groups.map((g) => [g.id, g.name]));
 
-  for (const [inventoryItemId, totalBaseQty] of aggregatedUsage) {
+  const deductions: DeductionItem[] = [];
+  const usageRows: InsertInventoryUsageInput[] = [];
+
+  for (const [inventoryItemId, portions] of perItemUsage) {
     const item = await getInventoryItem(db, inventoryItemId);
     if (!item) continue;
 
-    const qtyToDeduct = Math.min(totalBaseQty, item.stockBaseQty);
-    if (qtyToDeduct <= 0) continue;
+    const totalBaseQty = [...portions.values()].reduce((s, q) => s + q, 0);
+    if (totalBaseQty <= 0) continue;
 
-    const result = consumeStock(
+    // Deduct the FULL sold quantity — stock may go negative. The sale already
+    // happened; clamping here would silently understate COGS (e.g. when a
+    // purchase hasn't been entered yet). Negative items raise an owner alert.
+    const result = consumeStockAllowNegative(
       { baseQty: item.stockBaseQty, valueFils: item.stockValueFils },
-      qtyToDeduct,
+      totalBaseQty,
+      fallbackUnitCostFils(item),
     );
+
+    // Remember the pre-consumption average while one exists — it becomes the
+    // fallback cost if this item is consumed past zero later.
+    const preAvgFils =
+      item.stockBaseQty > 0 && item.stockValueFils > 0
+        ? item.stockValueFils / item.stockBaseQty
+        : undefined;
 
     await adjustStock(
       db,
       inventoryItemId,
       result.state.baseQty,
       result.state.valueFils,
+      preAvgFils,
     );
 
     deductions.push({
       inventoryItemId,
       inventoryItemName: item.name,
-      baseQtyDeducted: qtyToDeduct,
+      baseQtyDeducted: totalBaseQty,
       cogsFils: result.cogsFils,
+    });
+
+    // Split the item's COGS across the products that consumed it,
+    // proportionally by quantity. The last portion absorbs the rounding
+    // remainder so the allocations always sum exactly to the item's COGS.
+    const entries = [...portions.entries()];
+    let allocated = 0;
+    entries.forEach(([productId, qty], index) => {
+      const isLast = index === entries.length - 1;
+      const share = isLast
+        ? result.cogsFils - allocated
+        : Math.round((result.cogsFils * qty) / totalBaseQty);
+      allocated += share;
+
+      const product = productCache.get(productId);
+      const groupId = product?.groupId ?? null;
+      usageRows.push({
+        occurredOn: posImport.reportDate,
+        sourceType: "pos_import",
+        sourceId: importId,
+        inventoryItemId,
+        productId,
+        productGroupId: groupId,
+        productGroupName: groupId ? (groupNames.get(groupId) ?? null) : null,
+        qtyBase: qty,
+        cogsFils: share,
+      });
     });
   }
 
+  await insertUsageRows(db, usageRows);
   await setInventoryDeducted(db, importId, true, { deductions });
 
   return { deductions, alreadyDeducted: false };
@@ -279,6 +353,10 @@ export async function voidImport(
         );
       }
     }
+
+    // The usage ledger must mirror deduction_details exactly — a voided
+    // import's consumption never appears in COGS reports.
+    await deleteUsageBySource(db, "pos_import", importId);
   }
 
   await updatePosImportStatus(db, importId, "voided");

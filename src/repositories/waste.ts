@@ -112,16 +112,19 @@ export async function updateWasteStatus(
   status: string,
   reviewedBy: string,
   valueFils: number,
+  consumedBaseQty?: number,
 ): Promise<void> {
-  const { error } = await db
-    .from("waste_logs")
-    .update({
-      status,
-      value_fils: valueFils,
-      reviewed_by: reviewedBy,
-      reviewed_at: new Date().toISOString(),
-    })
-    .eq("id", id);
+  const updates: Record<string, unknown> = {
+    status,
+    value_fils: valueFils,
+    reviewed_by: reviewedBy,
+    reviewed_at: new Date().toISOString(),
+  };
+  if (consumedBaseQty !== undefined) {
+    updates.consumed_base_qty = consumedBaseQty;
+  }
+
+  const { error } = await db.from("waste_logs").update(updates).eq("id", id);
 
   if (error) throw error;
 }
@@ -198,6 +201,8 @@ function toWasteLog(row: any): WasteLog {
     inventoryItemId: row.inventory_item_id,
     baseQty: Number(row.base_qty),
     valueFils: Number(row.value_fils),
+    consumedBaseQty:
+      row.consumed_base_qty != null ? Number(row.consumed_base_qty) : null,
     reason: row.reason,
     notes: row.notes,
     occurredAt: row.occurred_at,

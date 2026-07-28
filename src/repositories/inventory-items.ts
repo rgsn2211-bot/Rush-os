@@ -104,13 +104,24 @@ export async function adjustStock(
   id: string,
   newBaseQty: number,
   newValueFils: number,
+  /**
+   * When the caller knows the current unit cost (e.g. it just consumed at a
+   * positive-stock average), persist it as the fallback for future
+   * past-zero consumption. Omit to leave the stored value untouched.
+   */
+  lastUnitCostFils?: number,
 ): Promise<void> {
+  const updates: Record<string, number> = {
+    stock_base_qty: newBaseQty,
+    stock_value_fils: newValueFils,
+  };
+  if (lastUnitCostFils !== undefined && lastUnitCostFils >= 0) {
+    updates.last_unit_cost_fils = lastUnitCostFils;
+  }
+
   const { error } = await db
     .from("inventory_items")
-    .update({
-      stock_base_qty: newBaseQty,
-      stock_value_fils: newValueFils,
-    })
+    .update(updates)
     .eq("id", id);
 
   if (error) throw error;
@@ -149,6 +160,7 @@ function toInventoryItem(row: any): InventoryItem {
     supplierId: row.supplier_id,
     stockBaseQty: Number(row.stock_base_qty),
     stockValueFils: Number(row.stock_value_fils),
+    lastUnitCostFils: Number(row.last_unit_cost_fils ?? 0),
     defaultCostFils: Number(row.default_cost_fils),
     costingMethod: row.costing_method,
     status: row.status,

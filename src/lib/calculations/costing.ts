@@ -116,6 +116,61 @@ export function consumeStock(
 }
 
 /**
+ * Consume stock allowing the quantity to go below zero.
+ *
+ * Used for consumptions that already happened in the real world (POS sales,
+ * waste) where the system's on-hand number may simply be behind — e.g. a
+ * purchase was not entered yet. Refusing or clamping the deduction would
+ * understate COGS, so instead the stock goes negative and the shortfall is
+ * costed at a fallback unit cost.
+ *
+ * How the shortfall is valued:
+ *   - The on-hand portion (if any) consumes ALL remaining value exactly, so no
+ *     rounding crumbs are left behind (same rule as consumeStock).
+ *   - The portion beyond on-hand is costed at `fallbackUnitCostFils` per base
+ *     unit (typically the item's last known average cost, or its default cost),
+ *     rounded once for the whole shortfall.
+ *
+ * The resulting state keeps the invariant value = avg x qty into negative
+ * territory: qty goes negative and value carries the matching negative amount.
+ * A later receiveStock simply adds qty and value, so the average self-corrects.
+ *
+ * Example: 10 on hand worth 500 fils, consume 25 with fallback 60 fils/unit:
+ *   cogs = 500 + round(15 * 60) = 1400; new state = { -15, -900 }.
+ *   Receiving 20 @ 60 later gives { 5, 300 } — a clean 60 fils average again.
+ */
+export function consumeStockAllowNegative(
+  current: StockState,
+  consumedBaseQty: number,
+  fallbackUnitCostFils: number,
+): { state: StockState; cogsFils: number } {
+  if (consumedBaseQty <= 0) {
+    throw new Error("consumedBaseQty must be greater than 0");
+  }
+  if (fallbackUnitCostFils < 0) {
+    throw new Error("fallbackUnitCostFils cannot be negative");
+  }
+
+  // Fits within on-hand stock: behave exactly like consumeStock.
+  if (consumedBaseQty <= current.baseQty) {
+    return consumeStock(current, consumedBaseQty);
+  }
+
+  const onHandQty = Math.max(0, current.baseQty);
+  const onHandValueFils = onHandQty > 0 ? current.valueFils : 0;
+  const shortfallQty = consumedBaseQty - onHandQty;
+  const shortfallCostFils = Math.round(shortfallQty * fallbackUnitCostFils);
+
+  return {
+    state: {
+      baseQty: current.baseQty - consumedBaseQty,
+      valueFils: current.valueFils - onHandValueFils - shortfallCostFils,
+    },
+    cogsFils: onHandValueFils + shortfallCostFils,
+  };
+}
+
+/**
  * Reconcile stock to a physically counted quantity (inventory count approval).
  *
  * The physical count is the source of truth, so on-hand is SET to the counted

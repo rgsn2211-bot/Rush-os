@@ -11,7 +11,7 @@ const EXPIRY_GRACE_DAYS = 30;
 
 export interface Alert {
   id: string;
-  type: "low_stock" | "pending_review" | "expiring" | "expired";
+  type: "low_stock" | "negative_stock" | "pending_review" | "expiring" | "expired";
   title: string;
   detail: string;
   link: string;
@@ -105,7 +105,17 @@ export async function getOwnerAlerts(db: SupabaseClient): Promise<Alert[]> {
   }
 
   for (const item of items) {
-    if (item.minBaseQty > 0 && item.stockBaseQty <= item.minBaseQty) {
+    if (item.stockBaseQty < 0) {
+      // Sales/waste consumed more than the system had on hand — most likely a
+      // purchase was never entered, or a count is needed.
+      alerts.push({
+        id: `negative-${item.id}`,
+        type: "negative_stock",
+        title: `${item.name} is negative`,
+        detail: `${item.stockBaseQty} ${item.baseUnit} on hand — record the missing purchase or run a count`,
+        link: `/owner/inventory/${item.id}`,
+      });
+    } else if (item.minBaseQty > 0 && item.stockBaseQty <= item.minBaseQty) {
       alerts.push({
         id: `low-${item.id}`,
         type: "low_stock",
@@ -131,7 +141,7 @@ export async function getOwnerAlerts(db: SupabaseClient): Promise<Alert[]> {
 
 export interface WorkerAlert {
   id: string;
-  type: "low_stock";
+  type: "low_stock" | "negative_stock";
   title: string;
   detail: string;
   itemId: string;
@@ -144,7 +154,15 @@ export async function getWorkerAlerts(
   const alerts: WorkerAlert[] = [];
 
   for (const item of items) {
-    if (item.minBaseQty > 0 && item.stockBaseQty <= item.minBaseQty) {
+    if (item.stockBaseQty < 0) {
+      alerts.push({
+        id: `negative-${item.id}`,
+        type: "negative_stock",
+        title: `${item.name} is negative`,
+        detail: `${item.stockBaseQty} ${item.baseUnit} on hand — stock ran out before the system knew`,
+        itemId: item.id,
+      });
+    } else if (item.minBaseQty > 0 && item.stockBaseQty <= item.minBaseQty) {
       alerts.push({
         id: `low-${item.id}`,
         type: "low_stock",
