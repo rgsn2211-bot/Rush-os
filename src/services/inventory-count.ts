@@ -21,6 +21,8 @@ import {
 import { getInventoryItem, adjustStock } from "@/repositories/inventory-items";
 import {
   insertUsageRows,
+  listUsageBySource,
+  deleteUsageBySource,
   type InsertInventoryUsageInput,
 } from "@/repositories/inventory-usage";
 import { listInventoryItemsOps } from "@/repositories/worker-inventory";
@@ -192,4 +194,57 @@ export async function reviewCount(
 
   await insertUsageRows(db, usageRows);
   await updateInventoryCountStatus(db, id, "approved", reviewedBy);
+}
+
+/**
+ * Owner removes a count RECORD while keeping the stock where the count put it.
+ * This is for the owner's "use the count to fix stock, then clean up" flow:
+ * the count's ledger rows are deleted (so variance/loss reports no longer
+ * include it) and the count itself is hard-deleted (lines cascade). The stock
+ * adjustment it made is intentionally NOT reversed.
+ */
+export async function deleteCountAsOwner(
+  db: SupabaseClient,
+  id: string,
+): Promise<void> {
+  const count = await getInventoryCount(db, id);
+  if (!count) throw new Error("Count not found");
+
+  await deleteUsageBySource(db, "count", id);
+  await deleteInventoryCount(db, id);
+}
+
+/**
+ * Owner voids an APPROVED count that was a genuine mis-entry, reversing its
+ * stock effects. Each item's stock/value delta is reversed from the count's
+ * usage-ledger rows (the exact deltas applied at approval — additive, so
+ * correct even if stock has moved since). The record is kept as voided.
+ */
+export async function voidApprovedCount(
+  db: SupabaseClient,
+  id: string,
+  reviewedBy: string,
+): Promise<void> {
+  const count = await getInventoryCount(db, id);
+  if (!count) throw new Error("Count not found");
+  if (count.status !== "approved") {
+    throw new Error("Only approved counts can be voided");
+  }
+
+  const rows = await listUsageBySource(db, "count", id);
+  for (const row of rows) {
+    const item = await getInventoryItem(db, row.inventoryItemId);
+    if (!item) continue;
+    // Ledger rows store the consumption sign (shrinkage positive), so adding
+    // them back restores the pre-count stock and value.
+    await adjustStock(
+      db,
+      item.id,
+      item.stockBaseQty + row.qtyBase,
+      item.stockValueFils + row.cogsFils,
+    );
+  }
+
+  await deleteUsageBySource(db, "count", id);
+  await updateInventoryCountStatus(db, id, "voided", reviewedBy);
 }

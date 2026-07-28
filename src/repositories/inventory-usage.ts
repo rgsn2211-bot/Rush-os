@@ -36,6 +36,22 @@ export async function insertUsageRows(
   if (error) throw error;
 }
 
+/** The ledger rows one source event wrote (exact record of what it consumed). */
+export async function listUsageBySource(
+  db: SupabaseClient,
+  sourceType: InventoryUsageSource,
+  sourceId: string,
+): Promise<InventoryUsage[]> {
+  const { data, error } = await db
+    .from("inventory_usage")
+    .select("*")
+    .eq("source_type", sourceType)
+    .eq("source_id", sourceId);
+
+  if (error) throw error;
+  return data.map(toInventoryUsage);
+}
+
 /** Remove the ledger rows a source event wrote (used when voiding it). */
 export async function deleteUsageBySource(
   db: SupabaseClient,

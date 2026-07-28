@@ -10,11 +10,16 @@ import {
   listPendingWasteLogs,
   listWorkerTodayWaste,
   getWasteLog,
+  getWasteLogWithDetails,
   updateWasteStatus,
   deleteWasteLog,
 } from "@/repositories/waste";
 import { getInventoryItem, adjustStock } from "@/repositories/inventory-items";
-import { insertUsageRows } from "@/repositories/inventory-usage";
+import {
+  insertUsageRows,
+  listUsageBySource,
+  deleteUsageBySource,
+} from "@/repositories/inventory-usage";
 import { listInventoryItemsOps } from "@/repositories/worker-inventory";
 import { consumeStockAllowNegative } from "@/lib/calculations/costing";
 import { fallbackUnitCostFils } from "@/services/inventory-costing";
@@ -161,4 +166,55 @@ export async function reviewWaste(
       cogsFils,
     },
   ]);
+}
+
+/** One waste log with item + submitter details, for the owner detail page. */
+export async function getWasteDetails(
+  db: SupabaseClient,
+  id: string,
+): Promise<WasteLogWithDetails | null> {
+  return getWasteLogWithDetails(db, id);
+}
+
+/**
+ * Owner voids an APPROVED waste entry (a mistaken approval). The stock and
+ * value it consumed are restored exactly from the entry's usage-ledger rows
+ * (additive, so it is correct even if stock moved — or went negative — since),
+ * the ledger rows are removed so reports no longer count the loss, and the
+ * entry is kept as a voided audit record.
+ *
+ * Entries approved before consumption tracking restore the logged quantity at
+ * the recorded loss value — the best information that exists for them.
+ */
+export async function voidApprovedWaste(
+  db: SupabaseClient,
+  id: string,
+  reviewedBy: string,
+): Promise<void> {
+  const log = await getWasteLog(db, id);
+  if (!log) throw new Error("Waste log not found");
+  if (log.status !== "approved") {
+    throw new Error("Only approved waste can be voided");
+  }
+
+  const rows = await listUsageBySource(db, "waste", id);
+  if (rows.length === 0) {
+    throw new Error(
+      "This entry has no usage record to reverse — adjust the item's stock with a count instead",
+    );
+  }
+
+  for (const row of rows) {
+    const item = await getInventoryItem(db, row.inventoryItemId);
+    if (!item) continue;
+    await adjustStock(
+      db,
+      item.id,
+      item.stockBaseQty + row.qtyBase,
+      item.stockValueFils + row.cogsFils,
+    );
+  }
+
+  await deleteUsageBySource(db, "waste", id);
+  await updateWasteStatus(db, id, "voided", reviewedBy, log.valueFils);
 }

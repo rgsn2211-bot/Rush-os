@@ -106,6 +106,17 @@ export async function getWasteLog(
   return toWasteLog(data);
 }
 
+/** One waste log with item + submitter details, for the owner detail page. */
+export async function getWasteLogWithDetails(
+  db: SupabaseClient,
+  id: string,
+): Promise<WasteLogWithDetails | null> {
+  const log = await getWasteLog(db, id);
+  if (!log) return null;
+  const [enriched] = await enrichWasteLogs(db, [log]);
+  return enriched;
+}
+
 export async function updateWasteStatus(
   db: SupabaseClient,
   id: string,

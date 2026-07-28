@@ -23,6 +23,7 @@ export type InventoryCountCreateInput = z.infer<
   typeof inventoryCountCreateSchema
 >;
 
+/** approve/reject a pending count; void reverses an approved one. */
 export const inventoryCountReviewSchema = z.object({
-  action: z.enum(["approve", "reject"]),
+  action: z.enum(["approve", "reject", "void"]),
 });

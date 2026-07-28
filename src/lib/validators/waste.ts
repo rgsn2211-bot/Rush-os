@@ -37,6 +37,7 @@ export type WasteLogBatchCreateInput = z.infer<
   typeof wasteLogBatchCreateSchema
 >;
 
+/** approve/reject a pending entry; void reverses an approved one. */
 export const wasteReviewSchema = z.object({
-  action: z.enum(["approve", "reject"]),
+  action: z.enum(["approve", "reject", "void"]),
 });
