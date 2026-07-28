@@ -109,7 +109,31 @@ Supabase + Vercel.
   auto-deducts from the appropriate account (Cash → register, others → bank);
   deleting an expense reverses the deduction.
 - Owner mobile "More" menu (slide-up sheet for pages not in bottom nav)
+- Inventory Count (worker submits blind count → owner reviews variances on a
+  detail page → approve reconciles stock; owner can also "remove record" —
+  delete the count but KEEP its stock adjustment — or "void & revert stock")
+- Inventory usage ledger (`inventory_usage`): every POS deduction, waste
+  approval, and count variance writes per-event rows with cost, preserving
+  product/group attribution. POS deductions and waste no longer clamp at
+  on-hand — **stock can go negative** (shortfall costed at the item's
+  `last_unit_cost_fils` fallback) and negative items raise alerts.
+- Profit Reports (owner): full P&L for any month/date range — revenue per
+  method + delivery platform from EOD, COGS by product/group/item from the
+  ledger, complimentary cost shown as an "of which" inside COGS (never
+  deducted twice), expenses by category, fees, losses, net profit.
+- Losses (owner): period report of waste by item, count shrinkage by item,
+  complimentary given away, and balance-adjustment shortages/overages.
+- Money → Adjust Balances: owner enters the actually-counted register/bank
+  amount; diff is logged (`balance_adjustments`) and posted as a
+  `balance_adjustment` cash movement (affects P&L by default); history +
+  drift report; deleting a check reverses its movement.
+- Complimentary approvals snapshot recipe cost (`cost_fils`) for reporting.
+- Inventory Insights (owner): 7/30-day consumption rates from the ledger,
+  stock-out predictions, reorder suggestions in whole purchase units,
+  fast-mover ranking.
+- Waste detail page + owner void of approved waste (restores stock exactly
+  from its ledger rows).
 
 **Not yet built (placeholders only):**
-- Mark Item Opened, Inventory Count (worker quick actions)
-- Profit Reports, Losses, AI Insights (owner pages)
+- Mark Item Opened (worker quick action)
+- AI Insights (owner page)
