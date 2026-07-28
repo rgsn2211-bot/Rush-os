@@ -6,7 +6,6 @@ import {
   getAllCashMovements,
   getApprovedPurchases,
   getPayables,
-  getAllSettlements,
   getSettlementLedgers,
   getCashFlowProjection,
   getAllRecurringCosts,
@@ -27,7 +26,6 @@ export default async function MoneyPage() {
     purchases,
     payables,
     suppliers,
-    settlements,
     ledgers,
     projection,
     recurringCosts,
@@ -38,7 +36,6 @@ export default async function MoneyPage() {
     getApprovedPurchases(db),
     getPayables(db),
     getAllSuppliers(db),
-    getAllSettlements(db),
     getSettlementLedgers(db),
     getCashFlowProjection(db),
     getAllRecurringCosts(db),
@@ -65,7 +62,6 @@ export default async function MoneyPage() {
       cashMovements={cashMovements}
       purchases={purchases.map(toRow)}
       payables={payables.map(toRow)}
-      settlements={settlements}
       ledgers={ledgers}
       projection={projection}
       recurringCosts={recurringCosts}

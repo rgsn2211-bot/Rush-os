@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { SettlementPayment } from "@/types/money";
 
 export interface InsertSettlementPaymentInput {
-  channel: "card" | "delivery";
+  channel: "card" | "delivery" | "benefitpay";
   platform?: string | null;
   kind: "payout" | "commission";
   amountFils: number;

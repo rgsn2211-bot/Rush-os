@@ -8,4 +8,5 @@ import type { LedgerChannel } from "@/types/money";
 export const FEE_TYPE_OPTIONS: Record<LedgerChannel, string[]> = {
   card: ["Processing fee", "Bank charge", "Other"],
   delivery: ["Commission", "Fixed fee", "Other"],
+  benefitpay: ["Fee", "Other"],
 };

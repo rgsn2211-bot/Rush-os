@@ -6,7 +6,6 @@ import type {
   MoneySummary,
   ExpenseWithLines,
   CashMovement,
-  Settlement,
   SettlementLedger,
   CashFlowProjection,
   RecurringCost,
@@ -41,7 +40,6 @@ interface Props {
   cashMovements: CashMovement[];
   purchases: PurchaseRow[];
   payables: PurchaseRow[];
-  settlements: Settlement[];
   ledgers: SettlementLedger[];
   projection: CashFlowProjection;
   recurringCosts: RecurringCost[];
@@ -71,7 +69,6 @@ export function MoneyDashboard({
   cashMovements,
   purchases,
   payables,
-  settlements,
   ledgers,
   projection,
   recurringCosts,
@@ -121,7 +118,6 @@ export function MoneyDashboard({
       )}
       {tab === "cashflow" && (
         <CashFlowView
-          settlements={settlements}
           ledgers={ledgers}
           projection={projection}
           onNew={() => setForm("settlement")}
