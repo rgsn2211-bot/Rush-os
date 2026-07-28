@@ -80,6 +80,28 @@ export async function listSettlements(
   return data.map(toSettlement);
 }
 
+/**
+ * Auto-created (EOD) settlements whose sales date falls in
+ * [fromInclusive, toExclusive), excluding voided. Their fee_fils carry the
+ * configured delivery commission per day — the accrual side of the P&L.
+ */
+export async function listAutoSettlementsBetween(
+  db: SupabaseClient,
+  fromInclusive: string,
+  toExclusive: string,
+): Promise<Settlement[]> {
+  const { data, error } = await db
+    .from("settlements")
+    .select("*")
+    .eq("auto_created", true)
+    .gte("sales_date", fromInclusive)
+    .lt("sales_date", toExclusive)
+    .neq("status", "voided");
+
+  if (error) throw error;
+  return data.map(toSettlement);
+}
+
 export async function getSettlement(
   db: SupabaseClient,
   id: string,

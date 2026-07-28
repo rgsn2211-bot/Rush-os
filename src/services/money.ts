@@ -23,7 +23,10 @@ import type {
   SettlementLedger,
   SettlementPayment,
   LedgerChannel,
+  BalanceAdjustment,
+  CashAccount,
 } from "@/types/money";
+import type { BalanceAdjustmentInput } from "@/lib/validators/money";
 import { bhdToFils } from "@/lib/calculations/currency";
 import {
   insertExpense,
@@ -66,6 +69,12 @@ import {
   getSettlementPayment,
   deleteSettlementPayment,
 } from "@/repositories/settlement-payments";
+import {
+  insertBalanceAdjustment,
+  listBalanceAdjustments,
+  getBalanceAdjustment,
+  deleteBalanceAdjustment,
+} from "@/repositories/balance-adjustments";
 
 // ---------- Expenses --------------------------------------------------------
 
@@ -187,6 +196,83 @@ export async function getAllCashMovements(
   db: SupabaseClient,
 ): Promise<CashMovement[]> {
   return listCashMovements(db);
+}
+
+// ---------- Balance adjustments ---------------------------------------------
+
+/**
+ * Reconcile an account to the physically counted amount. The expected balance
+ * is recomputed HERE, at confirm time — movements may have landed since any
+ * preview the owner saw. The check is always logged (a zero diff is a valuable
+ * "verified correct" audit point); a non-zero diff additionally posts one cash
+ * movement that brings the account to exactly the counted amount.
+ */
+export async function recordBalanceAdjustment(
+  db: SupabaseClient,
+  input: BalanceAdjustmentInput,
+  createdBy: string,
+): Promise<BalanceAdjustment> {
+  const expectedFils =
+    input.account === "register"
+      ? await getRegisterBalance(db)
+      : await getBankBalance(db);
+  const actualFils = bhdToFils(input.actualBhd);
+  const diffFils = actualFils - expectedFils;
+
+  const adjustment = await insertBalanceAdjustment(db, {
+    account: input.account,
+    expectedFils,
+    actualFils,
+    diffFils,
+    note: input.note,
+    occurredOn: input.occurredOn,
+    createdBy,
+  });
+
+  if (diffFils !== 0) {
+    await insertCashMovement(db, {
+      direction: diffFils > 0 ? "in" : "out",
+      reason: `Balance adjustment — ${input.account === "register" ? "Register" : "Bank"}`,
+      amountFils: Math.abs(diffFils),
+      method: input.account === "register" ? "Cash" : "Bank transfer",
+      occurredOn: input.occurredOn,
+      affectsPl: input.affectsPl,
+      account: input.account,
+      sourceType: "balance_adjustment",
+      sourceId: adjustment.id,
+      note: input.note,
+      createdBy,
+    });
+  }
+
+  return adjustment;
+}
+
+export async function getAllBalanceAdjustments(
+  db: SupabaseClient,
+): Promise<BalanceAdjustment[]> {
+  return listBalanceAdjustments(db);
+}
+
+/** Delete a balance check and reverse its posted movement, if any. */
+export async function removeBalanceAdjustment(
+  db: SupabaseClient,
+  id: string,
+): Promise<void> {
+  const adjustment = await getBalanceAdjustment(db, id);
+  if (!adjustment) throw new Error("Adjustment not found");
+  await deleteCashMovementsBySource(db, "balance_adjustment", id);
+  await deleteBalanceAdjustment(db, id);
+}
+
+/** Current computed balance of one account, for the adjust form preview. */
+export async function getAccountBalance(
+  db: SupabaseClient,
+  account: CashAccount,
+): Promise<number> {
+  return account === "register"
+    ? getRegisterBalance(db)
+    : getBankBalance(db);
 }
 
 export async function removeCashMovement(

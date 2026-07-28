@@ -565,6 +565,12 @@ function CashLog({
           Manual money in/out — the source of truth for cash position.
         </p>
         <div className="flex gap-2">
+          <Link
+            href="/owner/money/adjust"
+            className="border-line bg-card text-ink hover:bg-bg hover:border-ink-3 inline-flex h-8 items-center rounded-lg border px-3 text-xs font-semibold transition-colors"
+          >
+            Adjust Balances
+          </Link>
           <Button size="sm" variant="secondary" onClick={onTransfer}>
             <ArrowUpRight size={15} className="mr-1" />
             Deposit to Bank

@@ -88,6 +88,43 @@ export async function deleteExpense(
   if (error) throw error;
 }
 
+/** Expenses (with their lines) spent within [from, to) (ISO date strings). */
+export async function listExpensesBetween(
+  db: SupabaseClient,
+  fromInclusive: string,
+  toExclusive: string,
+): Promise<ExpenseWithLines[]> {
+  const { data: expenses, error } = await db
+    .from("expenses")
+    .select("*")
+    .gte("spent_on", fromInclusive)
+    .lt("spent_on", toExclusive);
+
+  if (error) throw error;
+  if (expenses.length === 0) return [];
+
+  const ids = expenses.map((e) => e.id);
+  const { data: lines, error: lineErr } = await db
+    .from("expense_lines")
+    .select("*")
+    .in("expense_id", ids);
+
+  if (lineErr) throw lineErr;
+
+  const byExpense = new Map<string, ExpenseLine[]>();
+  for (const l of lines) {
+    const line = toExpenseLine(l);
+    const arr = byExpense.get(line.expenseId) ?? [];
+    arr.push(line);
+    byExpense.set(line.expenseId, arr);
+  }
+
+  return expenses.map((e) => ({
+    ...toExpense(e),
+    lines: byExpense.get(e.id) ?? [],
+  }));
+}
+
 /** Sum of expense totals within [from, to) (ISO date strings). */
 export async function sumExpensesBetween(
   db: SupabaseClient,

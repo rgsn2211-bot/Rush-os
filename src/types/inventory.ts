@@ -42,6 +42,11 @@ export interface InventoryItem {
   stockBaseQty: number;
   /** Total value of stock on hand, in fils. Owner-only. */
   stockValueFils: number;
+  /**
+   * Last known weighted-average unit cost (fils per base unit, may be
+   * fractional). Used to cost consumption past zero when stock goes negative.
+   */
+  lastUnitCostFils: number;
   defaultCostFils: number;
   costingMethod: CostingMethod;
   status: ReviewStatus;
@@ -193,6 +198,11 @@ export interface WasteLog {
   baseQty: number;
   /** Loss value in fils. Set when the owner approves (0 until then). */
   valueFils: number;
+  /**
+   * What was actually consumed from stock at approval, in base units. Null
+   * until approved (and on rows approved before this was recorded).
+   */
+  consumedBaseQty: number | null;
   reason: string;
   notes: string | null;
   occurredAt: string;
@@ -250,6 +260,31 @@ export interface InventoryCountItemWithDetails extends InventoryCountItem {
   itemName: string | null;
   stockUnit: string | null;
   basePerStock: number;
+}
+
+export type InventoryUsageSource = "pos_import" | "waste" | "count";
+
+/**
+ * One row of the inventory usage ledger — a single stock consumption event
+ * with its cost, preserving which product (and product group) drove it.
+ * Owner + POS Manager only; workers never read cost data.
+ */
+export interface InventoryUsage {
+  id: string;
+  /** Business date of the consumption (POS report date; today for waste/counts). */
+  occurredOn: string;
+  sourceType: InventoryUsageSource;
+  sourceId: string;
+  inventoryItemId: string;
+  /** Product that drove a POS deduction; null for waste/counts/legacy rows. */
+  productId: string | null;
+  productGroupId: string | null;
+  /** Group name snapshotted at deduction time (survives rename/delete). */
+  productGroupName: string | null;
+  /** Positive = consumed (COGS); negative = restored (count overage). */
+  qtyBase: number;
+  cogsFils: number;
+  createdAt: string;
 }
 
 /** A session plus its enriched lines and submitter, for the detail view. */

@@ -71,7 +71,13 @@ async function landStock(
     baseQty,
     valueFils,
   );
-  await adjustStock(db, item.id, next.baseQty, next.valueFils);
+  // Refresh the fallback unit cost while a clean average exists — it's what
+  // consumption past zero gets costed at if stock later runs negative.
+  const lastUnitCostFils =
+    next.baseQty > 0 && next.valueFils > 0
+      ? next.valueFils / next.baseQty
+      : undefined;
+  await adjustStock(db, item.id, next.baseQty, next.valueFils, lastUnitCostFils);
 }
 
 /** Post the register/bank cash-out for a purchase payment. */

@@ -14,7 +14,12 @@ import {
   updateComplimentaryStatus,
   deleteComplimentaryLog,
 } from "@/repositories/complimentary";
-import { getProduct } from "@/repositories/products";
+import { getProduct, getRecipeIngredients } from "@/repositories/products";
+import { getInventoryItem } from "@/repositories/inventory-items";
+import {
+  recipeCostFils,
+  effectiveUnitCostFils,
+} from "@/lib/calculations/costing";
 
 export async function logComplimentary(
   db: SupabaseClient,
@@ -79,6 +84,12 @@ export async function deleteOwnComplimentary(
   await deleteComplimentaryLog(db, logId);
 }
 
+/**
+ * Owner reviews a complimentary entry. Approving snapshots the product's
+ * recipe cost as cost_fils (0 for "Other" entries without a product) so the
+ * cost of goods given away can be reported. No inventory is deducted here —
+ * complimentary items are already inside POS Sales By Item (never deduct twice).
+ */
 export async function reviewComplimentary(
   db: SupabaseClient,
   id: string,
@@ -91,6 +102,30 @@ export async function reviewComplimentary(
     throw new Error("Log is not pending review");
   }
 
-  const newStatus = action === "approve" ? "approved" : "voided";
-  await updateComplimentaryStatus(db, id, newStatus, reviewedBy);
+  if (action === "reject") {
+    await updateComplimentaryStatus(db, id, "voided", reviewedBy);
+    return;
+  }
+
+  let costFils = 0;
+  if (log.productId) {
+    const recipe = await getRecipeIngredients(db, log.productId);
+    const ingredientCosts = [];
+    for (const ing of recipe) {
+      const item = await getInventoryItem(db, ing.inventoryItemId);
+      ingredientCosts.push({
+        qtyBase: ing.qtyBase,
+        unitCostFils: item
+          ? effectiveUnitCostFils(
+              { baseQty: item.stockBaseQty, valueFils: item.stockValueFils },
+              item.costingMethod,
+              item.defaultCostFils,
+            )
+          : 0,
+      });
+    }
+    costFils = recipeCostFils(ingredientCosts);
+  }
+
+  await updateComplimentaryStatus(db, id, "approved", reviewedBy, costFils);
 }

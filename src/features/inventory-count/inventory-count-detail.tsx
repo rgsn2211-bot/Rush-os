@@ -9,7 +9,7 @@ import type {
 import { formatFils } from "@/lib/calculations/currency";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Check, X } from "lucide-react";
+import { Check, X, Trash2, Undo2 } from "lucide-react";
 
 interface Props {
   count: InventoryCountWithItems;
@@ -28,7 +28,7 @@ export function InventoryCountDetail({ count }: Props) {
   const isPending = count.status === "needs_review";
   const isApproved = count.status === "approved";
 
-  async function handleReview(action: "approve" | "reject") {
+  async function handleReview(action: "approve" | "reject" | "void") {
     setLoading(true);
     setError(null);
 
@@ -41,6 +41,43 @@ export function InventoryCountDetail({ count }: Props) {
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       setError(typeof data.error === "string" ? data.error : "Action failed");
+      setLoading(false);
+      return;
+    }
+
+    router.push("/owner/inventory-count");
+    router.refresh();
+  }
+
+  async function handleVoid() {
+    if (
+      !window.confirm(
+        "Void this count and revert the stock? Every item goes back to the quantity and value it had before the count was approved.",
+      )
+    ) {
+      return;
+    }
+    await handleReview("void");
+  }
+
+  async function handleDelete() {
+    if (
+      !window.confirm(
+        "Remove this count record? The stock KEEPS the adjustment the count made — only the record (and its variance in reports) disappears.",
+      )
+    ) {
+      return;
+    }
+    setLoading(true);
+    setError(null);
+
+    const res = await fetch(`/api/inventory-count/${count.id}`, {
+      method: "DELETE",
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(typeof data.error === "string" ? data.error : "Delete failed");
       setLoading(false);
       return;
     }
@@ -142,6 +179,42 @@ export function InventoryCountDetail({ count }: Props) {
             </Button>
           </div>
         </>
+      )}
+
+      {isApproved && (
+        <>
+          <p className="text-ink-3 mt-4 text-sm">
+            <span className="font-semibold">Remove record</span> keeps the stock
+            where this count put it and only deletes the record (it stops
+            counting in variance reports).{" "}
+            <span className="font-semibold">Void &amp; revert</span> also puts
+            the stock back to what it was before the count.
+          </p>
+          <div className="mt-3 flex gap-2">
+            <Button variant="secondary" onClick={handleDelete} disabled={loading}>
+              <Trash2 size={16} className="mr-1" />
+              Remove record (keep stock)
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={handleVoid}
+              disabled={loading}
+              className="text-rush-red"
+            >
+              <Undo2 size={16} className="mr-1" />
+              Void &amp; revert stock
+            </Button>
+          </div>
+        </>
+      )}
+
+      {!isPending && !isApproved && (
+        <div className="mt-3">
+          <Button variant="secondary" onClick={handleDelete} disabled={loading}>
+            <Trash2 size={16} className="mr-1" />
+            Remove record
+          </Button>
+        </div>
       )}
     </div>
   );

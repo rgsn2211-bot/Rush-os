@@ -10,12 +10,20 @@ import {
   listPendingWasteLogs,
   listWorkerTodayWaste,
   getWasteLog,
+  getWasteLogWithDetails,
   updateWasteStatus,
   deleteWasteLog,
 } from "@/repositories/waste";
 import { getInventoryItem, adjustStock } from "@/repositories/inventory-items";
+import {
+  insertUsageRows,
+  listUsageBySource,
+  deleteUsageBySource,
+} from "@/repositories/inventory-usage";
 import { listInventoryItemsOps } from "@/repositories/worker-inventory";
-import { consumeStock } from "@/lib/calculations/costing";
+import { consumeStockAllowNegative } from "@/lib/calculations/costing";
+import { fallbackUnitCostFils } from "@/services/inventory-costing";
+import { todayInBahrain } from "@/lib/dates";
 
 /**
  * Worker logs waste. The quantity arrives in the item's stock unit and is
@@ -110,11 +118,12 @@ export async function deleteOwnWaste(
 }
 
 /**
- * Owner reviews a waste entry. Approving consumes the wasted quantity from
+ * Owner reviews a waste entry. Approving consumes the FULL wasted quantity from
  * inventory at weighted-average cost and records the consumed value as the
- * loss. The consumed quantity is clamped to what is actually on hand (stock may
- * have moved since the worker logged it). Rejecting voids the entry with no
- * inventory change.
+ * loss — the waste already happened in the real world, so if the system's
+ * on-hand number is behind, the stock goes negative rather than the loss being
+ * understated (negative items raise an owner alert). Rejecting voids the entry
+ * with no inventory change.
  */
 export async function reviewWaste(
   db: SupabaseClient,
@@ -136,16 +145,76 @@ export async function reviewWaste(
   const item = await getInventoryItem(db, log.inventoryItemId);
   if (!item) throw new Error("Inventory item not found");
 
-  let lossFils = 0;
-  const consumeQty = Math.min(log.baseQty, item.stockBaseQty);
-  if (consumeQty > 0) {
-    const { state, cogsFils } = consumeStock(
-      { baseQty: item.stockBaseQty, valueFils: item.stockValueFils },
-      consumeQty,
-    );
-    lossFils = cogsFils;
-    await adjustStock(db, item.id, state.baseQty, state.valueFils);
+  const { state, cogsFils } = consumeStockAllowNegative(
+    { baseQty: item.stockBaseQty, valueFils: item.stockValueFils },
+    log.baseQty,
+    fallbackUnitCostFils(item),
+  );
+  await adjustStock(db, item.id, state.baseQty, state.valueFils);
+
+  await updateWasteStatus(db, id, "approved", reviewedBy, cogsFils, log.baseQty);
+
+  // Record the loss in the usage ledger so waste shows up in COGS/loss
+  // reports; consumed_base_qty on the log makes a later owner void exact.
+  await insertUsageRows(db, [
+    {
+      occurredOn: todayInBahrain(),
+      sourceType: "waste",
+      sourceId: id,
+      inventoryItemId: item.id,
+      qtyBase: log.baseQty,
+      cogsFils,
+    },
+  ]);
+}
+
+/** One waste log with item + submitter details, for the owner detail page. */
+export async function getWasteDetails(
+  db: SupabaseClient,
+  id: string,
+): Promise<WasteLogWithDetails | null> {
+  return getWasteLogWithDetails(db, id);
+}
+
+/**
+ * Owner voids an APPROVED waste entry (a mistaken approval). The stock and
+ * value it consumed are restored exactly from the entry's usage-ledger rows
+ * (additive, so it is correct even if stock moved — or went negative — since),
+ * the ledger rows are removed so reports no longer count the loss, and the
+ * entry is kept as a voided audit record.
+ *
+ * Entries approved before consumption tracking restore the logged quantity at
+ * the recorded loss value — the best information that exists for them.
+ */
+export async function voidApprovedWaste(
+  db: SupabaseClient,
+  id: string,
+  reviewedBy: string,
+): Promise<void> {
+  const log = await getWasteLog(db, id);
+  if (!log) throw new Error("Waste log not found");
+  if (log.status !== "approved") {
+    throw new Error("Only approved waste can be voided");
   }
 
-  await updateWasteStatus(db, id, "approved", reviewedBy, lossFils);
+  const rows = await listUsageBySource(db, "waste", id);
+  if (rows.length === 0) {
+    throw new Error(
+      "This entry has no usage record to reverse — adjust the item's stock with a count instead",
+    );
+  }
+
+  for (const row of rows) {
+    const item = await getInventoryItem(db, row.inventoryItemId);
+    if (!item) continue;
+    await adjustStock(
+      db,
+      item.id,
+      item.stockBaseQty + row.qtyBase,
+      item.stockValueFils + row.cogsFils,
+    );
+  }
+
+  await deleteUsageBySource(db, "waste", id);
+  await updateWasteStatus(db, id, "voided", reviewedBy, log.valueFils);
 }

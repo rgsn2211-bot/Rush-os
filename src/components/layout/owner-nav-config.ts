@@ -18,6 +18,7 @@ import {
   Upload,
   HandCoins,
   MoreHorizontal,
+  TrendingUp,
 } from "lucide-react";
 
 export type OwnerNavLink = {
@@ -61,6 +62,13 @@ export const ownerNav: OwnerNavItem[] = [
     label: "Inventory",
     href: "/owner/inventory",
     icon: Package,
+  },
+  {
+    type: "link",
+    id: "insights",
+    label: "Inventory Insights",
+    href: "/owner/inventory/insights",
+    icon: TrendingUp,
   },
   {
     type: "link",

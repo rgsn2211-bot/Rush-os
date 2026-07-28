@@ -60,10 +60,30 @@ export interface CashMovement {
   occurredOn: string;
   affectsPl: boolean;
   account: CashAccount;
+  /** Feature that posted this movement (e.g. "expense"); null for manual. */
+  sourceType: string | null;
+  sourceId: string | null;
   note: string | null;
   createdBy: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * One book-to-actual balance check. diff = actual − expected (signed);
+ * a non-zero diff also posts a linked cash_movement
+ * (source_type 'balance_adjustment') that brings the account to actual.
+ */
+export interface BalanceAdjustment {
+  id: string;
+  account: CashAccount;
+  expectedFils: number;
+  actualFils: number;
+  diffFils: number;
+  note: string | null;
+  occurredOn: string;
+  createdBy: string | null;
+  createdAt: string;
 }
 
 export type RecurringFrequency =

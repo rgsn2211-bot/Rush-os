@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { WasteLogWithDetails } from "@/types/inventory";
 import { formatFils } from "@/lib/calculations/currency";
@@ -131,13 +132,13 @@ export function WasteList({ logs }: Props) {
               key={log.id}
               className={`px-5 py-4 ${i > 0 ? "border-line-2 border-t" : ""}`}
             >
-              <div className="flex items-start gap-4">
+              <Link href={`/owner/waste/${log.id}`} className="group flex items-start gap-4">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-50">
                   <Trash2 size={20} className="text-rush-red" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[15px] font-bold">
+                    <span className="group-hover:text-navy text-[15px] font-bold transition-colors">
                       {log.itemName ?? "Item"}
                     </span>
                     {statusBadge(log.status)}
@@ -152,7 +153,7 @@ export function WasteList({ logs }: Props) {
                     {log.notes && ` · ${log.notes}`}
                   </div>
                 </div>
-              </div>
+              </Link>
 
               {log.status === "needs_review" && (
                 <div className="mt-3 flex gap-2 pl-14">

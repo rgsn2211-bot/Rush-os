@@ -176,17 +176,38 @@ export async function updateComplimentaryStatus(
   id: string,
   status: string,
   reviewedBy: string,
+  costFils?: number,
 ): Promise<void> {
+  const updates: Record<string, unknown> = {
+    status,
+    reviewed_by: reviewedBy,
+    reviewed_at: new Date().toISOString(),
+  };
+  if (costFils !== undefined) updates.cost_fils = costFils;
+
   const { error } = await db
     .from("complimentary_logs")
-    .update({
-      status,
-      reviewed_by: reviewedBy,
-      reviewed_at: new Date().toISOString(),
-    })
+    .update(updates)
     .eq("id", id);
 
   if (error) throw error;
+}
+
+/** Approved logs whose occurred_at falls in [fromInclusive, toExclusive) days. */
+export async function listApprovedComplimentaryBetween(
+  db: SupabaseClient,
+  fromInclusive: string,
+  toExclusive: string,
+): Promise<ComplimentaryLog[]> {
+  const { data, error } = await db
+    .from("complimentary_logs")
+    .select("*")
+    .eq("status", "approved")
+    .gte("occurred_at", `${fromInclusive}T00:00:00`)
+    .lt("occurred_at", `${toExclusive}T00:00:00`);
+
+  if (error) throw error;
+  return data.map(toComplimentaryLog);
 }
 
 export async function deleteComplimentaryLog(
@@ -207,6 +228,7 @@ function toComplimentaryLog(row: any): ComplimentaryLog {
     id: row.id,
     description: row.description,
     amountFils: Number(row.amount_fils),
+    costFils: Number(row.cost_fils ?? 0),
     reason: row.reason,
     notes: row.notes,
     productId: row.product_id,

@@ -88,6 +88,40 @@ export async function listPosImports(
   return data.map(toPosImport);
 }
 
+/** Non-voided, inventory-deducted imports with report_date in [from, to). */
+export async function listDeductedImportsBetween(
+  db: SupabaseClient,
+  fromInclusive: string,
+  toExclusive: string,
+): Promise<PosImport[]> {
+  const { data, error } = await db
+    .from("pos_imports")
+    .select("*")
+    .eq("inventory_deducted", true)
+    .neq("status", "voided")
+    .gte("report_date", fromInclusive)
+    .lt("report_date", toExclusive);
+
+  if (error) throw error;
+  return data.map(toPosImport);
+}
+
+/** All sales rows belonging to a set of imports. */
+export async function listSalesRowsForImports(
+  db: SupabaseClient,
+  importIds: string[],
+): Promise<PosSalesRow[]> {
+  if (importIds.length === 0) return [];
+
+  const { data, error } = await db
+    .from("pos_sales_rows")
+    .select("*")
+    .in("import_id", importIds);
+
+  if (error) throw error;
+  return data.map(toPosSalesRow);
+}
+
 export async function updatePosImportStatus(
   db: SupabaseClient,
   id: string,

@@ -14,6 +14,7 @@ export default async function AlertsPage() {
 
   const alerts = await getOwnerAlerts(db);
   const lowStockAlerts = alerts.filter((a) => a.type === "low_stock");
+  const negativeStockAlerts = alerts.filter((a) => a.type === "negative_stock");
   const reviewAlerts = alerts.filter((a) => a.type === "pending_review");
 
   return (
@@ -51,6 +52,33 @@ export default async function AlertsPage() {
                   </Card>
                 </Link>
               ))}
+            </div>
+          )}
+
+          {/* Negative stock — sold/used more than the system had on hand */}
+          {negativeStockAlerts.length > 0 && (
+            <div>
+              <h2 className="text-ink mb-3 flex items-center gap-2 text-base font-bold">
+                <AlertTriangle size={18} className="text-rush-red" />
+                Negative Stock ({negativeStockAlerts.length})
+              </h2>
+              <Card className="p-0">
+                {negativeStockAlerts.map((a, i) => (
+                  <Link
+                    key={a.id}
+                    href={a.link}
+                    className={`hover:bg-bg flex items-center justify-between px-5 py-3.5 ${
+                      i > 0 ? "border-line-2 border-t" : ""
+                    }`}
+                  >
+                    <div>
+                      <div className="text-[15px] font-semibold">{a.title}</div>
+                      <div className="text-ink-3 text-sm">{a.detail}</div>
+                    </div>
+                    <Badge variant="red">Negative</Badge>
+                  </Link>
+                ))}
+              </Card>
             </div>
           )}
 

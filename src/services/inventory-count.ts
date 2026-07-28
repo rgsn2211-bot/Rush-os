@@ -19,8 +19,15 @@ import {
   enrichInventoryCountItems,
 } from "@/repositories/inventory-counts";
 import { getInventoryItem, adjustStock } from "@/repositories/inventory-items";
+import {
+  insertUsageRows,
+  listUsageBySource,
+  deleteUsageBySource,
+  type InsertInventoryUsageInput,
+} from "@/repositories/inventory-usage";
 import { listInventoryItemsOps } from "@/repositories/worker-inventory";
 import { reconcileCount } from "@/lib/calculations/costing";
+import { todayInBahrain } from "@/lib/dates";
 
 /**
  * Worker submits a physical stock count. Each line's quantity arrives in the
@@ -151,9 +158,16 @@ export async function reviewCount(
   }
 
   const lines = await getInventoryCountItems(db, id);
+  const usageRows: InsertInventoryUsageInput[] = [];
+  const occurredOn = todayInBahrain();
+
   for (const line of lines) {
     const item = await getInventoryItem(db, line.inventoryItemId);
     if (!item) continue; // item voided/removed since submission — skip its line
+
+    // Reconcile against the LIVE on-hand (stock may have drifted since the
+    // worker snapshotted the expected amount) — the physical count wins.
+    const liveVarianceBaseQty = line.countedBaseQty - item.stockBaseQty;
 
     const { state, varianceFils } = reconcileCount(
       { baseQty: item.stockBaseQty, valueFils: item.stockValueFils },
@@ -163,7 +177,74 @@ export async function reviewCount(
 
     await adjustStock(db, item.id, state.baseQty, state.valueFils);
     await updateInventoryCountItemValue(db, line.id, varianceFils);
+
+    // Ledger convention: shrinkage (stock lost) is positive consumed qty and
+    // positive cost; an overage is negative (stock gained back value).
+    if (liveVarianceBaseQty !== 0) {
+      usageRows.push({
+        occurredOn,
+        sourceType: "count",
+        sourceId: id,
+        inventoryItemId: item.id,
+        qtyBase: -liveVarianceBaseQty,
+        cogsFils: -varianceFils,
+      });
+    }
   }
 
+  await insertUsageRows(db, usageRows);
   await updateInventoryCountStatus(db, id, "approved", reviewedBy);
+}
+
+/**
+ * Owner removes a count RECORD while keeping the stock where the count put it.
+ * This is for the owner's "use the count to fix stock, then clean up" flow:
+ * the count's ledger rows are deleted (so variance/loss reports no longer
+ * include it) and the count itself is hard-deleted (lines cascade). The stock
+ * adjustment it made is intentionally NOT reversed.
+ */
+export async function deleteCountAsOwner(
+  db: SupabaseClient,
+  id: string,
+): Promise<void> {
+  const count = await getInventoryCount(db, id);
+  if (!count) throw new Error("Count not found");
+
+  await deleteUsageBySource(db, "count", id);
+  await deleteInventoryCount(db, id);
+}
+
+/**
+ * Owner voids an APPROVED count that was a genuine mis-entry, reversing its
+ * stock effects. Each item's stock/value delta is reversed from the count's
+ * usage-ledger rows (the exact deltas applied at approval — additive, so
+ * correct even if stock has moved since). The record is kept as voided.
+ */
+export async function voidApprovedCount(
+  db: SupabaseClient,
+  id: string,
+  reviewedBy: string,
+): Promise<void> {
+  const count = await getInventoryCount(db, id);
+  if (!count) throw new Error("Count not found");
+  if (count.status !== "approved") {
+    throw new Error("Only approved counts can be voided");
+  }
+
+  const rows = await listUsageBySource(db, "count", id);
+  for (const row of rows) {
+    const item = await getInventoryItem(db, row.inventoryItemId);
+    if (!item) continue;
+    // Ledger rows store the consumption sign (shrinkage positive), so adding
+    // them back restores the pre-count stock and value.
+    await adjustStock(
+      db,
+      item.id,
+      item.stockBaseQty + row.qtyBase,
+      item.stockValueFils + row.cogsFils,
+    );
+  }
+
+  await deleteUsageBySource(db, "count", id);
+  await updateInventoryCountStatus(db, id, "voided", reviewedBy);
 }

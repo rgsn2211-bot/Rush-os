@@ -112,6 +112,53 @@ export async function listDailyClosings(
   return withSubmitterNames(db, data.map(toDailyClosing));
 }
 
+/** Approved closings with report_date in [fromInclusive, toExclusive). */
+export async function listApprovedClosingsBetween(
+  db: SupabaseClient,
+  fromInclusive: string,
+  toExclusive: string,
+): Promise<DailyClosing[]> {
+  const { data, error } = await db
+    .from("daily_closings")
+    .select("*")
+    .eq("status", "approved")
+    .gte("report_date", fromInclusive)
+    .lt("report_date", toExclusive)
+    .order("report_date");
+
+  if (error) throw error;
+  return data.map(toDailyClosing);
+}
+
+export interface DeliveryLineRow {
+  closingId: string;
+  platformId: string;
+  salesFils: number;
+  orders: number;
+}
+
+/** Delivery lines for a set of closings, without the platform-name join. */
+export async function listDeliveryLinesForClosings(
+  db: SupabaseClient,
+  closingIds: string[],
+): Promise<DeliveryLineRow[]> {
+  if (closingIds.length === 0) return [];
+
+  const { data, error } = await db
+    .from("daily_closing_delivery_lines")
+    .select("closing_id, platform_id, sales_fils, orders")
+    .in("closing_id", closingIds);
+
+  if (error) throw error;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data ?? []).map((row: any) => ({
+    closingId: row.closing_id,
+    platformId: row.platform_id,
+    salesFils: Number(row.sales_fils),
+    orders: Number(row.orders),
+  }));
+}
+
 export async function listPendingDailyClosings(
   db: SupabaseClient,
 ): Promise<DailyClosingWithSubmitter[]> {
