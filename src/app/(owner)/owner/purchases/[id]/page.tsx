@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { VoidPurchaseButton } from "@/features/purchases/void-purchase-button";
 import { PurchaseActions } from "@/features/purchases/purchase-actions";
+import { Pencil } from "lucide-react";
 
 const STAGE: Record<
   string,
@@ -75,7 +76,18 @@ export default async function PurchaseDetailPage({
       <PageHeader
         title={`Purchase · ${new Date(purchase.purchasedOn).toLocaleDateString()}`}
         subtitle={supplier ? supplier.name : "No supplier"}
-        actions={<VoidPurchaseButton purchaseId={purchase.id} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/owner/purchases/${purchase.id}/edit`}
+              className="border-line bg-card text-ink hover:bg-bg hover:border-ink-3 inline-flex h-8 items-center gap-1 rounded-lg border px-3 text-xs font-semibold transition-colors"
+            >
+              <Pencil size={13} />
+              Edit
+            </Link>
+            <VoidPurchaseButton purchaseId={purchase.id} />
+          </div>
+        }
       />
 
       <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">

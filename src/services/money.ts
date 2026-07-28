@@ -615,10 +615,16 @@ export async function getSettlementLedgers(
     return l;
   };
 
-  // Pooled "should have": pending card/delivery settlements only.
+  // Pooled "should have": pending settlements per channel (card/delivery/benefitpay).
   for (const s of settlements) {
     if (s.status !== "pending") continue;
-    if (s.channel !== "card" && s.channel !== "delivery") continue;
+    if (
+      s.channel !== "card" &&
+      s.channel !== "delivery" &&
+      s.channel !== "benefitpay"
+    ) {
+      continue;
+    }
     const platform = s.channel === "delivery" ? s.platform : null;
     ensure(s.channel, platform).shouldHaveFils += s.expectedFils;
   }
@@ -648,10 +654,9 @@ export async function getSettlementLedgers(
  * by providers, minus what we owe suppliers (payables). Cash flow follows money
  * received/paid — not sales dates.
  *
- * Card/delivery pending settlements no longer self-clear (they're the pooled
- * "should have"), so we swap their gross pending sum for the net still-owed from
- * the ledgers. What's left in the raw pending sum is BenefitPay, which still
- * self-clears on confirm.
+ * Settlement pending amounts no longer self-clear (they're the pooled "should
+ * have" for each channel's ledger), so we swap their gross pending sum for the
+ * net still-owed from the ledgers.
  */
 export async function getCashFlowProjection(
   db: SupabaseClient,

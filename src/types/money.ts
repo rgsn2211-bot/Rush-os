@@ -130,8 +130,8 @@ export interface Settlement {
 }
 
 export type SettlementPaymentKind = "payout" | "commission";
-/** Channels that use the running-total settlement ledger (not BenefitPay). */
-export type LedgerChannel = "card" | "delivery";
+/** Channels that use the running-total settlement ledger. */
+export type LedgerChannel = "card" | "delivery" | "benefitpay";
 
 /**
  * A single owner-recorded settlement entry against a channel's pooled total:

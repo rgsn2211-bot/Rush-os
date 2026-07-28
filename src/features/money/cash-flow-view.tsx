@@ -1,9 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import type {
-  Settlement,
   SettlementChannel,
   SettlementLedger,
   CashFlowProjection,
@@ -11,12 +9,8 @@ import type {
 import { formatFils } from "@/lib/calculations/currency";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { EmptyState } from "@/components/ui/empty-state";
 import { SettlementLedger as SettlementLedgerView } from "@/features/money/settlement-ledger";
-import { Plus, Check, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 
 const CHANNELS: { v: SettlementChannel; label: string }[] = [
   { v: "card", label: "Card" },
@@ -25,28 +19,23 @@ const CHANNELS: { v: SettlementChannel; label: string }[] = [
 ];
 
 const CHANNEL_NOTE: Record<SettlementChannel, string> = {
-  card: "Card pays in lump sums that don't map to days. Record each payout received and enter the commission taken; the difference is tracked as a running total.",
+  card: "Card pays in lump sums that don't map to days. Record each payout received and the commission taken; the running total shows what's still owed.",
   benefitpay:
-    "BenefitPay goes directly to the bank with no fee — confirm received to reconcile.",
+    "BenefitPay pays into the bank. Record each payout received (and any fee taken); the running total shows what's still owed.",
   delivery:
     "Delivery apps pay per platform. Record payouts received and the commission taken; the running total shows what's still owed.",
 };
 
 export function CashFlowView({
-  settlements,
   ledgers,
   projection,
   onNew,
 }: {
-  settlements: Settlement[];
   ledgers: SettlementLedger[];
   projection: CashFlowProjection;
   onNew: () => void;
 }) {
   const [channel, setChannel] = useState<SettlementChannel>("card");
-  // Card & delivery use the running-total ledger; BenefitPay keeps per-row confirm.
-  const usesLedger = channel === "card" || channel === "delivery";
-  const rows = settlements.filter((s) => s.channel === channel);
 
   return (
     <div>
@@ -76,25 +65,13 @@ export function CashFlowView({
             </button>
           ))}
         </div>
-        {!usesLedger && (
-          <Button size="sm" onClick={onNew}>
-            <Plus size={15} className="mr-1" />
-            Add Settlement
-          </Button>
-        )}
+        <Button size="sm" variant="secondary" onClick={onNew}>
+          <Plus size={15} className="mr-1" />
+          Add expected
+        </Button>
       </div>
 
-      {channel === "card" || channel === "delivery" ? (
-        <SettlementLedgerView channel={channel} ledgers={ledgers} />
-      ) : rows.length === 0 ? (
-        <EmptyState message="No settlements recorded for this channel." />
-      ) : (
-        <Card className="p-0">
-          {rows.map((s, i) => (
-            <SettlementRow key={s.id} settlement={s} first={i === 0} />
-          ))}
-        </Card>
-      )}
+      <SettlementLedgerView channel={channel} ledgers={ledgers} />
 
       <p className="text-ink-3 mt-3 text-xs leading-relaxed">
         {CHANNEL_NOTE[channel]}
@@ -149,141 +126,6 @@ function ProjectedRow({ projection }: { projection: CashFlowProjection }) {
           </span>
         </div>
       ))}
-    </div>
-  );
-}
-
-function SettlementRow({
-  settlement: s,
-  first,
-}: {
-  settlement: Settlement;
-  first: boolean;
-}) {
-  const router = useRouter();
-  const today = new Date().toISOString().split("T")[0];
-  const [confirming, setConfirming] = useState(false);
-  const [actual, setActual] = useState("");
-  const [fee, setFee] = useState(
-    s.feeFils !== null ? String(s.feeFils / 1000) : "",
-  );
-  const [receivedOn, setReceivedOn] = useState(today);
-  const [loading, setLoading] = useState(false);
-
-  async function confirm() {
-    setLoading(true);
-    await fetch(`/api/money/settlements/${s.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        actualBhd: Number(actual) || 0,
-        feeBhd: Number(fee) > 0 ? Number(fee) : undefined,
-        receivedOn,
-      }),
-    });
-    setLoading(false);
-    setConfirming(false);
-    router.refresh();
-  }
-
-  async function remove() {
-    setLoading(true);
-    await fetch(`/api/money/settlements/${s.id}`, { method: "DELETE" });
-    setLoading(false);
-    router.refresh();
-  }
-
-  return (
-    <div className={first ? "" : "border-line-2 border-t"}>
-      <div className="flex items-center gap-4 px-5 py-4">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            {s.platform && (
-              <span className="text-[15px] font-bold">{s.platform}</span>
-            )}
-            <span
-              className={s.platform ? "text-ink-2 text-sm" : "text-[15px] font-bold"}
-            >
-              {s.periodLabel}
-            </span>
-            {s.status === "received" ? (
-              <Badge variant="green">Received</Badge>
-            ) : (
-              <Badge variant="amber">Pending</Badge>
-            )}
-          </div>
-          <div className="text-ink-3 mt-0.5 text-[13px]">
-            Expected {formatFils(s.expectedFils)}
-            {s.feeFils !== null && ` · fee ${formatFils(s.feeFils)}`}
-            {s.actualFils !== null &&
-              ` · received ${formatFils(s.actualFils)} on ${s.receivedOn}`}
-          </div>
-        </div>
-        {s.status === "pending" ? (
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => setConfirming((c) => !c)}
-            disabled={loading}
-          >
-            Confirm
-          </Button>
-        ) : (
-          <Check size={18} className="text-rush-green" />
-        )}
-        <button
-          onClick={remove}
-          disabled={loading}
-          className="text-ink-3 hover:text-rush-red"
-          aria-label="Delete settlement"
-        >
-          <Trash2 size={16} />
-        </button>
-      </div>
-
-      {confirming && s.status === "pending" && (
-        <div className="bg-bg grid grid-cols-1 gap-3 px-5 py-4 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
-          <div>
-            <Label htmlFor={`actual-${s.id}`}>Actual received (BHD)</Label>
-            <Input
-              id={`actual-${s.id}`}
-              type="number"
-              min="0"
-              step="0.001"
-              value={actual}
-              onChange={(e) => setActual(e.target.value)}
-              placeholder={formatFils(s.expectedFils)}
-              className="font-mono"
-            />
-          </div>
-          <div>
-            <Label htmlFor={`fee-${s.id}`}>Fee (BHD)</Label>
-            <Input
-              id={`fee-${s.id}`}
-              type="number"
-              min="0"
-              step="0.001"
-              value={fee}
-              onChange={(e) => setFee(e.target.value)}
-              placeholder="0.000"
-              className="font-mono"
-            />
-          </div>
-          <div>
-            <Label htmlFor={`date-${s.id}`}>Received on</Label>
-            <Input
-              id={`date-${s.id}`}
-              type="date"
-              value={receivedOn}
-              onChange={(e) => setReceivedOn(e.target.value)}
-            />
-          </div>
-          <Button onClick={confirm} disabled={loading}>
-            <Check size={16} className="mr-1" />
-            Save
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

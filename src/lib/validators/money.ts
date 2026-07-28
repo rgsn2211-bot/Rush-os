@@ -76,7 +76,7 @@ export type SettlementReconcileInput = z.infer<
 
 /** Record a settlement payout received — amount + date received only. */
 export const settlementPayoutSchema = z.object({
-  channel: z.enum(["card", "delivery"]),
+  channel: z.enum(["card", "delivery", "benefitpay"]),
   platform: z.string().trim().min(1).optional(),
   amountBhd: moneyBhd.refine((v) => v > 0, "Amount must be greater than 0"),
   receivedOn: dateStr,
@@ -87,7 +87,7 @@ export type SettlementPayoutInput = z.infer<typeof settlementPayoutSchema>;
 /** Record commission kept by the provider over a date range. */
 export const settlementCommissionSchema = z
   .object({
-    channel: z.enum(["card", "delivery"]),
+    channel: z.enum(["card", "delivery", "benefitpay"]),
     platform: z.string().trim().min(1).optional(),
     amountBhd: moneyBhd.refine((v) => v > 0, "Amount must be greater than 0"),
     periodFrom: dateStr,

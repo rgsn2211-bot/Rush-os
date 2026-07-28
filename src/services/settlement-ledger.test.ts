@@ -132,6 +132,28 @@ describe("settlement ledger — running total", () => {
     expect(card.stillOwedFils).toBe(15000);
   });
 
+  it("tracks a benefitpay ledger like card", async () => {
+    const f = makeFakeDb({
+      settlements: [
+        pendingSettlement({ channel: "benefitpay", expected_fils: 9000 }),
+      ],
+    });
+
+    await recordPayout(
+      db(f),
+      { channel: "benefitpay", amountBhd: 9, receivedOn: "2026-07-22" },
+      OWNER,
+    );
+
+    const bp = (await getSettlementLedgers(db(f))).find(
+      (l) => l.channel === "benefitpay",
+    )!;
+    expect(bp.shouldHaveFils).toBe(9000);
+    expect(bp.receivedFils).toBe(9000);
+    expect(bp.stillOwedFils).toBe(0);
+    expect(f.tables.cash_movements).toHaveLength(1);
+  });
+
   it("tracks delivery ledgers per platform", async () => {
     const f = makeFakeDb({
       settlements: [

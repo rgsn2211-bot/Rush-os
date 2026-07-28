@@ -24,6 +24,8 @@ import {
   updatePurchaseItemCost,
   updatePurchaseItemReceived,
   updatePurchaseStatus,
+  deletePurchaseItems,
+  updatePurchaseHeader,
 } from "@/repositories/purchases";
 import { getInventoryItem, adjustStock } from "@/repositories/inventory-items";
 import { listInventoryItemsOps } from "@/repositories/worker-inventory";
@@ -484,6 +486,117 @@ export async function cancelPurchase(
 
   await deleteCashMovementsBySource(db, "purchase_payment", id);
   await voidPurchase(db, id);
+}
+
+/**
+ * Edit a purchase in place (owner). To keep weighted-average cost and the cash
+ * ledger correct, this fully reverses the purchase's current effects (the same
+ * reversal Void does) and re-applies the edited details, keeping the same id
+ * and lifecycle status:
+ *  - approved: stock is un-landed then re-landed at the new quantities/costs;
+ *  - a posted payment (approved paid, or a worker cash purchase) is removed and
+ *    re-posted at the new total;
+ *  - ordered/needs_review touch no stock, so only the record and any register
+ *    cash purchase are updated.
+ */
+export async function updatePurchase(
+  db: SupabaseClient,
+  purchaseId: string,
+  input: PurchaseCreateInput,
+  editedBy: string,
+): Promise<void> {
+  const existing = await getPurchaseWithItems(db, purchaseId);
+  if (!existing) throw new Error("Purchase not found");
+  const status = existing.purchase.status;
+  if (status === "voided") throw new Error("Cannot edit a voided purchase");
+
+  // 1. Reverse current effects. Only an approved purchase moved stock.
+  if (status === "approved") {
+    for (const pi of existing.items) {
+      const item = await getInventoryItem(db, pi.inventoryItemId);
+      if (!item) continue;
+      await adjustStock(
+        db,
+        item.id,
+        Math.max(0, item.stockBaseQty - pi.baseQty),
+        Math.max(0, item.stockValueFils - pi.lineTotalFils),
+      );
+    }
+  }
+  // Remove any payment cash movement (approved paid, or worker cash purchase).
+  await deleteCashMovementsBySource(db, "purchase_payment", purchaseId);
+
+  // 2. Recompute the edited lines.
+  const itemDetails = await Promise.all(
+    input.items.map(async (line) => {
+      const item = await getInventoryItem(db, line.inventoryItemId);
+      if (!item) {
+        throw new Error(`Inventory item ${line.inventoryItemId} not found`);
+      }
+      const baseQty = purchaseToBaseQty(
+        line.purchaseQty,
+        item.unitsPerPurchase,
+        item.basePerStock,
+      );
+      const lineTotalFils = Math.round(line.purchaseQty * line.unitCostFils);
+      return { item, baseQty, lineTotalFils, line };
+    }),
+  );
+  const totalFils = itemDetails.reduce((sum, d) => sum + d.lineTotalFils, 0);
+
+  // 3. Replace the line items.
+  await deletePurchaseItems(db, purchaseId);
+  await insertPurchaseItems(
+    db,
+    itemDetails.map((d) => ({
+      purchaseId,
+      inventoryItemId: d.line.inventoryItemId,
+      purchaseQty: d.line.purchaseQty,
+      baseQty: d.baseQty,
+      unitCostFils: d.line.unitCostFils,
+      lineTotalFils: d.lineTotalFils,
+      expiryDate: d.line.expiryDate ?? null,
+    })),
+  );
+
+  // 4. Update the header. Ordered purchases are never paid.
+  const purchasedOn = input.purchasedOn ?? existing.purchase.purchasedOn;
+  const canPay = status !== "ordered";
+  const isPaid = canPay && input.isPaid;
+  // Money leaves the till/bank now for an approved payment, or for a worker
+  // cash purchase (the register moved when it was recorded).
+  const paying =
+    isPaid &&
+    !!input.paidMethod &&
+    (status === "approved" ||
+      (status === "needs_review" && input.paidMethod === "cash"));
+
+  await updatePurchaseHeader(db, purchaseId, {
+    supplierId: input.supplierId ?? null,
+    purchasedOn,
+    isPaid,
+    paidMethod: isPaid ? (input.paidMethod ?? null) : null,
+    paidOn: paying ? (existing.purchase.paidOn ?? purchasedOn) : null,
+    dueDate: !isPaid ? (input.dueDate ?? null) : null,
+    totalFils,
+  });
+
+  // 5. Re-apply effects.
+  if (status === "approved") {
+    for (const d of itemDetails) {
+      await landStock(db, d.item.id, d.baseQty, d.lineTotalFils);
+    }
+  }
+  if (paying && input.paidMethod) {
+    await postPurchasePayment(
+      db,
+      purchaseId,
+      input.paidMethod,
+      totalFils,
+      purchasedOn,
+      editedBy,
+    );
+  }
 }
 
 /**

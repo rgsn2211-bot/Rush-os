@@ -189,6 +189,49 @@ export async function insertPurchaseItems(
   return data.map(toPurchaseItem);
 }
 
+/** Delete all line items for a purchase (used when re-entering an edited purchase). */
+export async function deletePurchaseItems(
+  db: SupabaseClient,
+  purchaseId: string,
+): Promise<void> {
+  const { error } = await db
+    .from("purchase_items")
+    .delete()
+    .eq("purchase_id", purchaseId);
+  if (error) throw error;
+}
+
+export interface UpdatePurchaseHeaderInput {
+  supplierId: string | null;
+  purchasedOn: string;
+  isPaid: boolean;
+  paidMethod: "cash" | "bank" | null;
+  paidOn: string | null;
+  dueDate: string | null;
+  totalFils: number;
+}
+
+/** Overwrite a purchase's header fields (supplier, date, payment, total). */
+export async function updatePurchaseHeader(
+  db: SupabaseClient,
+  id: string,
+  patch: UpdatePurchaseHeaderInput,
+): Promise<void> {
+  const { error } = await db
+    .from("purchases")
+    .update({
+      supplier_id: patch.supplierId,
+      purchased_on: patch.purchasedOn,
+      is_paid: patch.isPaid,
+      paid_method: patch.paidMethod,
+      paid_on: patch.paidOn,
+      due_date: patch.dueDate,
+      total_fils: patch.totalFils,
+    })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 export async function voidPurchase(
   db: SupabaseClient,
   id: string,
