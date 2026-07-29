@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireWorker } from "@/lib/auth";
-import { listProducts } from "@/repositories/products";
-import { getWorkerTodayLogs } from "@/services/complimentary";
+import {
+  getWorkerTodayLogs,
+  getComplimentaryProducts,
+} from "@/services/complimentary";
 import { ComplimentaryForm } from "@/features/worker/complimentary-form";
 
 export default async function WorkerComplimentaryPage() {
@@ -10,7 +12,7 @@ export default async function WorkerComplimentaryPage() {
   const authUser = await requireWorker(db);
 
   const [products, todayLogs] = await Promise.all([
-    listProducts(db),
+    getComplimentaryProducts(db),
     getWorkerTodayLogs(db, authUser.id),
   ]);
 

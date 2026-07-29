@@ -14,12 +14,46 @@ import {
   updateComplimentaryStatus,
   deleteComplimentaryLog,
 } from "@/repositories/complimentary";
-import { getProduct, getRecipeIngredients } from "@/repositories/products";
+import type { Product } from "@/types/inventory";
+import {
+  getProduct,
+  getRecipeIngredients,
+  listProducts,
+} from "@/repositories/products";
+import { listProductGroups } from "@/repositories/product-groups";
 import { getInventoryItem } from "@/repositories/inventory-items";
 import {
   recipeCostFils,
   effectiveUnitCostFils,
 } from "@/lib/calculations/costing";
+
+/**
+ * The group holding the real sellable menu. Other groups (Modifiers,
+ * Packaging, Training, Staff) exist to model POS buttons for internal usage —
+ * they are not things a worker gives away as a complimentary drink.
+ */
+const MENU_GROUP_NAME = "menu";
+
+/**
+ * Products a worker can pick from when logging a complimentary item: the Menu
+ * group only. If no Menu group exists (renamed or removed), every product is
+ * returned rather than leaving the worker with an empty picker.
+ */
+export async function getComplimentaryProducts(
+  db: SupabaseClient,
+): Promise<Product[]> {
+  const [groups, products] = await Promise.all([
+    listProductGroups(db),
+    listProducts(db),
+  ]);
+
+  const menuGroup = groups.find(
+    (g) => g.name.trim().toLowerCase() === MENU_GROUP_NAME,
+  );
+  if (!menuGroup) return products;
+
+  return products.filter((p) => p.groupId === menuGroup.id);
+}
 
 export async function logComplimentary(
   db: SupabaseClient,
