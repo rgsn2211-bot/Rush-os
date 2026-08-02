@@ -3,6 +3,13 @@ import type { InventoryItem, InventoryItemOps } from "@/types/inventory";
 import { getAllItems } from "@/services/inventory";
 import { listInventoryItemsOps } from "@/repositories/worker-inventory";
 import { listPendingPurchases, listExpiringStock } from "@/repositories/purchases";
+import { getUsageReport } from "@/services/usage-report";
+import { WASTE_ALERT_PCT } from "@/lib/calculations/usage-mix";
+import { formatFils } from "@/lib/calculations/currency";
+import { addDays, todayInBahrain, type Period } from "@/lib/dates";
+
+/** The trailing window the waste rate is measured over. */
+const WASTE_WINDOW_DAYS = 30;
 
 /** How many days before an item expires we start warning. */
 export const EXPIRY_WARN_DAYS = 7;
@@ -11,7 +18,13 @@ const EXPIRY_GRACE_DAYS = 30;
 
 export interface Alert {
   id: string;
-  type: "low_stock" | "negative_stock" | "pending_review" | "expiring" | "expired";
+  type:
+    | "low_stock"
+    | "negative_stock"
+    | "high_waste"
+    | "pending_review"
+    | "expiring"
+    | "expired";
   title: string;
   detail: string;
   link: string;
@@ -25,6 +38,16 @@ export interface ExpiryAlert {
   itemId: string;
   expiryDate: string;
   daysUntil: number;
+}
+
+/** The last N days up to and including today, as a report Period. */
+function trailingPeriod(days: number): Period {
+  const today = todayInBahrain();
+  return {
+    fromInclusive: addDays(today, -(days - 1)),
+    toExclusive: addDays(today, 1),
+    toInclusive: today,
+  };
 }
 
 function todayIso(): string {
@@ -86,10 +109,15 @@ export async function getExpiryAlerts(
 }
 
 export async function getOwnerAlerts(db: SupabaseClient): Promise<Alert[]> {
-  const [items, pending, expiry] = await Promise.all([
+  const wasteWindow = trailingPeriod(WASTE_WINDOW_DAYS);
+
+  const [items, pending, expiry, usage] = await Promise.all([
     getAllItems(db),
     listPendingPurchases(db),
     getExpiryAlerts(db),
+    // Waste rates are financial, so this is owner-only — there is no
+    // equivalent in getWorkerAlerts.
+    getUsageReport(db, wasteWindow),
   ]);
 
   const alerts: Alert[] = [];
@@ -124,6 +152,16 @@ export async function getOwnerAlerts(db: SupabaseClient): Promise<Alert[]> {
         link: `/owner/inventory/${item.id}`,
       });
     }
+  }
+
+  for (const line of usage.highWasteItems) {
+    alerts.push({
+      id: `waste-${line.inventoryItemId}`,
+      type: "high_waste",
+      title: `${line.name} is over ${WASTE_ALERT_PCT}% waste`,
+      detail: `${line.mix.wasteRatePct.toFixed(1)}% of what was used in the last ${WASTE_WINDOW_DAYS} days was wasted or went missing (${formatFils(line.lostFils)} BHD)`,
+      link: `/owner/losses/${line.inventoryItemId}?from=${wasteWindow.fromInclusive}&to=${wasteWindow.toInclusive}`,
+    });
   }
 
   if (pending.length > 0) {
