@@ -292,8 +292,29 @@ export interface InventoryUsage {
   /** Positive = consumed (COGS); negative = restored (count overage). */
   qtyBase: number;
   cogsFils: number;
+  /** How the stock left: a sale, legitimate use, waste, shrinkage or overage. */
+  usageClass: UsageClass;
+  /** Set when this row was split off another by a partial reclassification. */
+  reclassifiedFromId: string | null;
+  reclassNote: string | null;
+  reclassifiedBy: string | null;
+  reclassifiedAt: string | null;
   createdAt: string;
 }
+
+/**
+ * How consumed stock is accounted for. `sold` and `used` are legitimate
+ * consumption; `wasted` and `shrinkage` are losses; `overage` is stock found
+ * at a count (negative cost, not consumption at all).
+ *
+ * The owner can move a `wasted` or `shrinkage` row to `used` or `sold` when
+ * the "loss" was really ordinary consumption the POS could not see — napkins,
+ * cleaning supplies, an unmapped POS button.
+ */
+export type UsageClass = "sold" | "used" | "wasted" | "shrinkage" | "overage";
+
+/** The classes that represent a real loss (what the Losses report totals). */
+export const LOSS_CLASSES: UsageClass[] = ["wasted", "shrinkage"];
 
 /** A session plus its enriched lines and submitter, for the detail view. */
 export interface InventoryCountWithItems extends InventoryCount {

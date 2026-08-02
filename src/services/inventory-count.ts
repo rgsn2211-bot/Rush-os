@@ -195,6 +195,9 @@ async function applyCountReconciliation(
         inventoryItemId: item.id,
         qtyBase: -liveVarianceBaseQty,
         cogsFils: -varianceFils,
+        // Stock missing is shrinkage; stock found is an overage, which is not
+        // consumption at all.
+        usageClass: -varianceFils >= 0 ? "shrinkage" : "overage",
       });
     }
   }

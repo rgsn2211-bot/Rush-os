@@ -167,6 +167,7 @@ export async function reviewWaste(
       occurredOn: log.effectiveOn ?? todayInBahrain(),
       sourceType: "waste",
       sourceId: id,
+      usageClass: "wasted",
       inventoryItemId: item.id,
       qtyBase: log.baseQty,
       cogsFils,

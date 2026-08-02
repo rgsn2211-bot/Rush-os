@@ -17,12 +17,14 @@ function ItemTable({
   totalFils,
   lines,
   emptyText,
+  period,
 }: {
   title: string;
   subtitle: string;
   totalFils: number;
   lines: LossItemLine[];
   emptyText: string;
+  period: { from: string; to: string };
 }) {
   return (
     <Card className="p-0">
@@ -35,9 +37,10 @@ function ItemTable({
       ) : (
         <div className="flex flex-col">
           {lines.map((l) => (
-            <div
+            <Link
               key={l.inventoryItemId}
-              className="border-line-2 flex items-center gap-3 border-b px-5 py-3 last:border-b-0 text-sm"
+              href={`/owner/losses/${l.inventoryItemId}?from=${period.from}&to=${period.to}`}
+              className="border-line-2 hover:bg-bg flex items-center gap-3 border-b px-5 py-3 last:border-b-0 text-sm transition-colors"
             >
               <span className="min-w-0 flex-1 truncate font-semibold">{l.name}</span>
               <span className="text-ink-2 font-mono text-xs">
@@ -49,7 +52,7 @@ function ItemTable({
               >
                 {signed(l.valueFils)} BHD
               </span>
-            </div>
+            </Link>
           ))}
           <div className="bg-bg border-line-2 flex items-center justify-between border-t px-5 py-3 text-sm font-bold">
             <span>Total</span>
@@ -64,6 +67,8 @@ function ItemTable({
 }
 
 export function LossesView({ report }: { report: LossesReport }) {
+  const period = { from: report.fromInclusive, to: report.toInclusive };
+
   return (
     <div className="flex flex-col gap-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -92,6 +97,7 @@ export function LossesView({ report }: { report: LossesReport }) {
           totalFils={report.wasteFils}
           lines={report.wasteByItem}
           emptyText="No approved waste in this period."
+          period={period}
         />
         <ItemTable
           title="Count variance by item"
@@ -99,8 +105,18 @@ export function LossesView({ report }: { report: LossesReport }) {
           totalFils={report.countShrinkFils}
           lines={report.countByItem}
           emptyText="No count variances in this period."
+          period={period}
         />
       </div>
+
+      <ItemTable
+        title="Operational usage (adjusted out of losses)"
+        subtitle="Waste or shrinkage you marked as ordinary use or an unrecorded sale — still inside COGS, no longer counted as a loss"
+        totalFils={report.operationalUsageFils}
+        lines={report.operationalByItem}
+        emptyText="Nothing has been adjusted out of losses in this period."
+        period={period}
+      />
 
       <Card className="p-0">
         <div className="border-line-2 border-b px-5 py-4">
