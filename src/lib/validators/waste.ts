@@ -20,6 +20,14 @@ export const wasteLogCreateSchema = z.object({
   stockQty: z.number().positive("Quantity must be greater than 0"),
   reason: z.enum(WASTE_REASONS),
   notes: z.string().trim().optional(),
+  /**
+   * The business date this loss is reported on. Defaults to today in Bahrain;
+   * set it to book waste discovered late into the month it belongs to.
+   */
+  effectiveOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Use a YYYY-MM-DD date")
+    .optional(),
 });
 export type WasteLogCreateInput = z.infer<typeof wasteLogCreateSchema>;
 

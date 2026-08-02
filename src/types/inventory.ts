@@ -206,6 +206,8 @@ export interface WasteLog {
   reason: string;
   notes: string | null;
   occurredAt: string;
+  /** The business date this loss is reported on (see InventoryCount). */
+  effectiveOn: string | null;
   status: ReviewStatus;
   createdBy: string | null;
   reviewedBy: string | null;
@@ -231,6 +233,12 @@ export interface InventoryCount {
   id: string;
   notes: string | null;
   countedAt: string;
+  /**
+   * The business date this count's shrinkage is reported on. Independent of
+   * when it was counted or approved, so a count of last month's shelves can
+   * book its loss to last month. Null only on rows predating the column.
+   */
+  effectiveOn: string | null;
   status: ReviewStatus;
   createdBy: string | null;
   reviewedBy: string | null;

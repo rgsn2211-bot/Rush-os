@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireOwner } from "@/lib/auth";
 import { getCountWithItems } from "@/services/inventory-count";
+import { getAllItems } from "@/services/inventory";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { InventoryCountDetail } from "@/features/inventory-count/inventory-count-detail";
@@ -16,7 +17,10 @@ export default async function InventoryCountDetailPage({
   await requireOwner(db);
 
   const { id } = await params;
-  const count = await getCountWithItems(db, id);
+  const [count, items] = await Promise.all([
+    getCountWithItems(db, id),
+    getAllItems(db),
+  ]);
   if (!count) notFound();
 
   function statusBadge(status: string) {
@@ -49,7 +53,7 @@ export default async function InventoryCountDetailPage({
         actions={statusBadge(count.status)}
       />
 
-      <InventoryCountDetail count={count} />
+      <InventoryCountDetail count={count} items={items} />
     </div>
   );
 }

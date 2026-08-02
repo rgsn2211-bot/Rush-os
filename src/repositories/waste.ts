@@ -6,6 +6,8 @@ export interface InsertWasteLogInput {
   baseQty: number;
   reason: string;
   notes?: string;
+  /** Business date the loss is reported on. */
+  effectiveOn: string;
   createdBy: string;
 }
 
@@ -20,6 +22,7 @@ export async function insertWasteLog(
       base_qty: input.baseQty,
       reason: input.reason,
       notes: input.notes ?? null,
+      effective_on: input.effectiveOn,
       created_by: input.createdBy,
       status: "needs_review",
     })
@@ -217,6 +220,7 @@ function toWasteLog(row: any): WasteLog {
     reason: row.reason,
     notes: row.notes,
     occurredAt: row.occurred_at,
+    effectiveOn: row.effective_on ?? null,
     status: row.status,
     createdBy: row.created_by,
     reviewedBy: row.reviewed_by,

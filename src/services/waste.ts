@@ -49,6 +49,7 @@ export async function logWaste(
     baseQty,
     reason: input.reason,
     notes: input.notes,
+    effectiveOn: input.effectiveOn ?? todayInBahrain(),
     createdBy,
   });
 }
@@ -77,6 +78,7 @@ export async function logWasteBatch(
       baseQty,
       reason: line.reason,
       notes: line.notes,
+      effectiveOn: line.effectiveOn ?? todayInBahrain(),
       createdBy,
     });
     created.push(log);
@@ -161,7 +163,8 @@ export async function reviewWaste(
   // reports; consumed_base_qty on the log makes a later owner void exact.
   await insertUsageRows(db, [
     {
-      occurredOn: todayInBahrain(),
+      // The business date the loss belongs to, not the day it was approved.
+      occurredOn: log.effectiveOn ?? todayInBahrain(),
       sourceType: "waste",
       sourceId: id,
       inventoryItemId: item.id,

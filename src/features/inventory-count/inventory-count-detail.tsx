@@ -1,18 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type {
   InventoryCountWithItems,
   InventoryCountItemWithDetails,
+  InventoryItem,
 } from "@/types/inventory";
 import { formatFils } from "@/lib/calculations/currency";
+import { stockToBaseQty } from "@/lib/calculations/costing";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Check, X, Trash2, Undo2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
+import { Check, X, Trash2, Undo2, Pencil } from "lucide-react";
 
 interface Props {
   count: InventoryCountWithItems;
+  /** Every live item, so the owner can add one the worker missed. */
+  items: InventoryItem[];
 }
 
 /** A base-unit quantity shown in stock units (trailing zeros trimmed). */
@@ -20,13 +27,143 @@ function toStock(baseQty: number, basePerStock: number): number {
   return baseQty / (basePerStock || 1);
 }
 
-export function InventoryCountDetail({ count }: Props) {
+function round(n: number): number {
+  return Math.round(n * 1000) / 1000;
+}
+
+/** One row of the edit form. Quantities are entered in the item's stock unit. */
+interface EditLine {
+  inventoryItemId: string;
+  name: string;
+  stockUnit: string;
+  baseUnit: string;
+  basePerStock: number;
+  /** Raw input string so a half-typed number does not fight the user. */
+  countedStockQty: string;
+}
+
+export function InventoryCountDetail({ count, items }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
 
   const isPending = count.status === "needs_review";
   const isApproved = count.status === "approved";
+  const canEdit = isPending || isApproved;
+
+  const itemById = useMemo(
+    () => new Map(items.map((i) => [i.id, i])),
+    [items],
+  );
+
+  const [lines, setLines] = useState<EditLine[]>([]);
+  const [effectiveOn, setEffectiveOn] = useState(count.effectiveOn ?? "");
+  const [addItemId, setAddItemId] = useState("");
+
+  function startEditing() {
+    setLines(
+      count.items.map((line) => {
+        const item = itemById.get(line.inventoryItemId);
+        return {
+          inventoryItemId: line.inventoryItemId,
+          name: line.itemName ?? item?.name ?? "Item",
+          stockUnit: line.stockUnit ?? item?.stockUnit ?? "",
+          baseUnit: item?.baseUnit ?? "",
+          basePerStock: line.basePerStock || 1,
+          countedStockQty: String(
+            toStock(line.countedBaseQty, line.basePerStock),
+          ),
+        };
+      }),
+    );
+    setEffectiveOn(count.effectiveOn ?? "");
+    setError(null);
+    setEditing(true);
+  }
+
+  function updateLine(itemId: string, value: string) {
+    setLines((prev) =>
+      prev.map((l) =>
+        l.inventoryItemId === itemId ? { ...l, countedStockQty: value } : l,
+      ),
+    );
+  }
+
+  function removeLine(itemId: string) {
+    setLines((prev) => prev.filter((l) => l.inventoryItemId !== itemId));
+  }
+
+  function addLine(itemId: string) {
+    setAddItemId("");
+    if (!itemId) return;
+    const item = itemById.get(itemId);
+    if (!item || lines.some((l) => l.inventoryItemId === itemId)) return;
+
+    setLines((prev) => [
+      ...prev,
+      {
+        inventoryItemId: item.id,
+        name: item.name,
+        stockUnit: item.stockUnit,
+        baseUnit: item.baseUnit,
+        basePerStock: item.basePerStock,
+        countedStockQty: "",
+      },
+    ]);
+  }
+
+  const availableToAdd = items.filter(
+    (i) => !lines.some((l) => l.inventoryItemId === i.id),
+  );
+
+  async function handleSave() {
+    setError(null);
+
+    const payloadItems = lines
+      .filter((l) => l.countedStockQty.trim() !== "")
+      .map((l) => ({
+        inventoryItemId: l.inventoryItemId,
+        countedStockQty: Number(l.countedStockQty),
+      }));
+
+    if (payloadItems.length === 0) {
+      setError("A count needs at least one item with a quantity.");
+      return;
+    }
+    if (
+      payloadItems.some(
+        (i) => !Number.isFinite(i.countedStockQty) || i.countedStockQty < 0,
+      )
+    ) {
+      setError("Counted quantities must be zero or more.");
+      return;
+    }
+
+    setLoading(true);
+
+    const res = await fetch(`/api/inventory-count/${count.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        items: payloadItems,
+        ...(effectiveOn ? { effectiveOn } : {}),
+      }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(
+        typeof data.error === "string" ? data.error : "Could not save changes",
+      );
+      setLoading(false);
+      return;
+    }
+
+    setEditing(false);
+    setLoading(false);
+    router.refresh();
+  }
 
   async function handleReview(action: "approve" | "reject" | "void") {
     setLoading(true);
@@ -110,12 +247,130 @@ export function InventoryCountDetail({ count }: Props) {
     );
   }
 
+  if (editing) {
+    return (
+      <div>
+        {error && (
+          <div className="bg-rush-red-bg text-rush-red mb-4 rounded-xl px-4 py-3 text-sm">
+            {error}
+          </div>
+        )}
+
+        <Card className="mb-4 p-5">
+          <Label htmlFor="effectiveOn">Apply losses to</Label>
+          <Input
+            id="effectiveOn"
+            type="date"
+            value={effectiveOn}
+            onChange={(e) => setEffectiveOn(e.target.value)}
+            className="max-w-[200px] font-mono"
+          />
+          <p className="text-ink-3 mt-2 text-xs">
+            The month this count&apos;s shrinkage is reported in. Stock updates
+            now regardless — set this to a past date when you are counting for a
+            month that has already closed.
+          </p>
+        </Card>
+
+        <Card className="overflow-hidden p-0">
+          {lines.map((l, i) => (
+            <div
+              key={l.inventoryItemId}
+              className={`flex items-center gap-3 px-5 py-3 ${
+                i > 0 ? "border-line-2 border-t" : ""
+              }`}
+            >
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold">{l.name}</div>
+                <div className="text-ink-3 text-xs">
+                  {l.basePerStock !== 1 &&
+                  l.countedStockQty.trim() !== "" &&
+                  Number.isFinite(Number(l.countedStockQty))
+                    ? `${Number(l.countedStockQty)} ${l.stockUnit} = ${round(
+                        stockToBaseQty(
+                          Number(l.countedStockQty),
+                          l.basePerStock,
+                        ),
+                      )} ${l.baseUnit}`
+                    : `Counted in ${l.stockUnit}`}
+                </div>
+              </div>
+              <Input
+                type="number"
+                min="0"
+                step="any"
+                inputMode="decimal"
+                value={l.countedStockQty}
+                onChange={(e) => updateLine(l.inventoryItemId, e.target.value)}
+                placeholder="—"
+                className="w-28 text-right font-mono"
+                aria-label={`Counted ${l.name} in ${l.stockUnit}`}
+              />
+              <button
+                type="button"
+                onClick={() => removeLine(l.inventoryItemId)}
+                className="text-ink-3 hover:text-rush-red shrink-0 rounded-lg p-2 transition-colors"
+                aria-label={`Remove ${l.name} from this count`}
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))}
+        </Card>
+
+        {availableToAdd.length > 0 && (
+          <Card className="mt-4 p-5">
+            <Label htmlFor="addItem">Add an item the worker missed</Label>
+            <Select
+              id="addItem"
+              value={addItemId}
+              onChange={(e) => addLine(e.target.value)}
+            >
+              <option value="">Choose an item...</option>
+              {availableToAdd.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.name} ({i.stockUnit})
+                </option>
+              ))}
+            </Select>
+          </Card>
+        )}
+
+        <p className="text-ink-3 mt-4 text-sm">
+          {isApproved
+            ? "Saving re-adjusts stock to the new counted amounts and re-dates the loss."
+            : "Nothing is applied until you approve this count."}
+        </p>
+
+        <div className="mt-3 flex gap-2">
+          <Button onClick={handleSave} disabled={loading}>
+            {loading ? "Saving..." : "Save changes"}
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => setEditing(false)}
+            disabled={loading}
+          >
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       {error && (
         <div className="bg-rush-red-bg text-rush-red mb-4 rounded-xl px-4 py-3 text-sm">
           {error}
         </div>
+      )}
+
+      {count.effectiveOn && (
+        <p className="text-ink-3 mb-3 text-sm">
+          Losses reported on{" "}
+          <span className="text-ink font-semibold">{count.effectiveOn}</span>
+        </p>
       )}
 
       <Card className="overflow-hidden p-0">
@@ -152,6 +407,15 @@ export function InventoryCountDetail({ count }: Props) {
           </div>
         ))}
       </Card>
+
+      {canEdit && (
+        <div className="mt-4">
+          <Button variant="secondary" onClick={startEditing} disabled={loading}>
+            <Pencil size={16} className="mr-1" />
+            Edit counts
+          </Button>
+        </div>
+      )}
 
       {isPending && (
         <>

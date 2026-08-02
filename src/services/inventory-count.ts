@@ -4,7 +4,10 @@ import type {
   InventoryCountSummary,
   InventoryCountWithItems,
 } from "@/types/inventory";
-import type { InventoryCountCreateInput } from "@/lib/validators/inventory-count";
+import type {
+  InventoryCountCreateInput,
+  InventoryCountEditInput,
+} from "@/lib/validators/inventory-count";
 import {
   insertInventoryCount,
   insertInventoryCountItems,
@@ -15,10 +18,16 @@ import {
   getInventoryCountItems,
   updateInventoryCountStatus,
   updateInventoryCountItemValue,
+  updateInventoryCountMeta,
   deleteInventoryCount,
+  deleteInventoryCountItems,
   enrichInventoryCountItems,
 } from "@/repositories/inventory-counts";
-import { getInventoryItem, adjustStock } from "@/repositories/inventory-items";
+import {
+  getInventoryItem,
+  adjustStock,
+  listInventoryItems,
+} from "@/repositories/inventory-items";
 import {
   insertUsageRows,
   listUsageBySource,
@@ -65,6 +74,7 @@ export async function submitCount(
 
   const count = await insertInventoryCount(db, {
     notes: input.notes,
+    effectiveOn: input.effectiveOn ?? todayInBahrain(),
     createdBy,
   });
 
@@ -136,33 +146,27 @@ export async function deleteOwnCount(
 }
 
 /**
- * Owner reviews a count session. Approving reconciles every line: each item's
- * on-hand is SET to the counted quantity and revalued at its current
- * weighted-average cost (the physical count is the source of truth, so this is
- * an absolute set, correct even if stock drifted since submission). The value
- * change is stored per line — negative for a shortage (shrinkage loss), positive
- * for an overage. Rejecting voids the session with no inventory change.
+ * Reconcile every line of a session: each item's on-hand is SET to the counted
+ * quantity and revalued at its current weighted-average cost (the physical
+ * count is the source of truth, so this is an absolute set, correct even if
+ * stock drifted since submission). The value change is stored per line —
+ * negative for a shortage (shrinkage loss), positive for an overage — and each
+ * non-zero variance writes a usage-ledger row.
+ *
+ * Ledger rows are dated by the count's `effectiveOn` business date, NOT the day
+ * this runs, so a count of last month's shelves reports its shrinkage in last
+ * month.
+ *
+ * Shared by the approval path and the approved-count editor, which reverts
+ * first and then calls this again.
  */
-export async function reviewCount(
+async function applyCountReconciliation(
   db: SupabaseClient,
-  id: string,
-  action: "approve" | "reject",
-  reviewedBy: string,
+  count: InventoryCount,
 ): Promise<void> {
-  const count = await getInventoryCount(db, id);
-  if (!count) throw new Error("Count not found");
-  if (count.status !== "needs_review") {
-    throw new Error("Count is not pending review");
-  }
-
-  if (action === "reject") {
-    await updateInventoryCountStatus(db, id, "voided", reviewedBy);
-    return;
-  }
-
-  const lines = await getInventoryCountItems(db, id);
+  const lines = await getInventoryCountItems(db, count.id);
   const usageRows: InsertInventoryUsageInput[] = [];
-  const occurredOn = todayInBahrain();
+  const occurredOn = count.effectiveOn ?? todayInBahrain();
 
   for (const line of lines) {
     const item = await getInventoryItem(db, line.inventoryItemId);
@@ -187,7 +191,7 @@ export async function reviewCount(
       usageRows.push({
         occurredOn,
         sourceType: "count",
-        sourceId: id,
+        sourceId: count.id,
         inventoryItemId: item.id,
         qtyBase: -liveVarianceBaseQty,
         cogsFils: -varianceFils,
@@ -196,7 +200,143 @@ export async function reviewCount(
   }
 
   await insertUsageRows(db, usageRows);
+}
+
+/**
+ * Undo an approved count's stock effects from its ledger rows and clear them.
+ * The rows store the exact deltas applied at approval, so adding them back is
+ * correct even if stock has moved (or gone negative) since.
+ *
+ * Shared by the void action and the approved-count editor.
+ */
+async function revertCountStock(
+  db: SupabaseClient,
+  countId: string,
+): Promise<void> {
+  const rows = await listUsageBySource(db, "count", countId);
+  for (const row of rows) {
+    const item = await getInventoryItem(db, row.inventoryItemId);
+    if (!item) continue;
+    await adjustStock(
+      db,
+      item.id,
+      item.stockBaseQty + row.qtyBase,
+      item.stockValueFils + row.cogsFils,
+    );
+  }
+  await deleteUsageBySource(db, "count", countId);
+}
+
+/**
+ * Owner reviews a count session. Approving reconciles stock to the counted
+ * quantities; rejecting voids the session with no inventory change.
+ */
+export async function reviewCount(
+  db: SupabaseClient,
+  id: string,
+  action: "approve" | "reject",
+  reviewedBy: string,
+): Promise<void> {
+  const count = await getInventoryCount(db, id);
+  if (!count) throw new Error("Count not found");
+  if (count.status !== "needs_review") {
+    throw new Error("Count is not pending review");
+  }
+
+  if (action === "reject") {
+    await updateInventoryCountStatus(db, id, "voided", reviewedBy);
+    return;
+  }
+
+  await applyCountReconciliation(db, count);
   await updateInventoryCountStatus(db, id, "approved", reviewedBy);
+}
+
+/**
+ * Replace a session's lines with the owner's corrected set. Items already on
+ * the count keep their original `expected` snapshot (that is what the worker
+ * actually found the shelf showing); an item the owner adds snapshots the live
+ * on-hand instead.
+ */
+async function replaceCountLines(
+  db: SupabaseClient,
+  countId: string,
+  input: InventoryCountEditInput,
+): Promise<void> {
+  const [existing, items] = await Promise.all([
+    getInventoryCountItems(db, countId),
+    listInventoryItems(db),
+  ]);
+
+  const expectedByItem = new Map(
+    existing.map((l) => [l.inventoryItemId, l.expectedBaseQty]),
+  );
+  const itemMap = new Map(items.map((i) => [i.id, i]));
+
+  const lines = input.items.map((line) => {
+    const item = itemMap.get(line.inventoryItemId);
+    if (!item) throw new Error("Inventory item not found");
+
+    const countedBaseQty = stockToBaseQty(
+      line.countedStockQty,
+      item.basePerStock,
+    );
+    const expectedBaseQty =
+      expectedByItem.get(line.inventoryItemId) ?? item.stockBaseQty;
+
+    return {
+      countId,
+      inventoryItemId: line.inventoryItemId,
+      expectedBaseQty,
+      countedBaseQty,
+      varianceBaseQty: countedBaseQty - expectedBaseQty,
+    };
+  });
+
+  await deleteInventoryCountItems(db, countId);
+  await insertInventoryCountItems(db, lines);
+}
+
+/**
+ * Owner corrects a count. Nothing here is destructive to the record — the
+ * session keeps its identity, submitter and status.
+ *
+ * - Pending: only the stored numbers change; stock is untouched until approval.
+ * - Approved: the count's stock effects are reverted from its ledger rows, the
+ *   lines are replaced, and the reconciliation is re-applied. Because
+ *   reconciliation is an ABSOLUTE set, this lands on exactly the corrected
+ *   quantities from whatever the stock is now. Changing only `effectiveOn`
+ *   re-dates the ledger rows through the same path, so a loss booked to the
+ *   wrong month can be moved after the fact.
+ */
+export async function editCount(
+  db: SupabaseClient,
+  id: string,
+  input: InventoryCountEditInput,
+  reviewedBy: string,
+): Promise<void> {
+  const count = await getInventoryCount(db, id);
+  if (!count) throw new Error("Count not found");
+  if (count.status !== "needs_review" && count.status !== "approved") {
+    throw new Error("Only pending or approved counts can be edited");
+  }
+
+  if (count.status === "approved") {
+    await revertCountStock(db, id);
+  }
+
+  await updateInventoryCountMeta(db, id, {
+    notes: input.notes,
+    effectiveOn: input.effectiveOn,
+  });
+  await replaceCountLines(db, id, input);
+
+  if (count.status === "approved") {
+    const updated = await getInventoryCount(db, id);
+    if (!updated) throw new Error("Count not found");
+    await applyCountReconciliation(db, updated);
+    await updateInventoryCountStatus(db, id, "approved", reviewedBy);
+  }
 }
 
 /**
@@ -234,20 +374,6 @@ export async function voidApprovedCount(
     throw new Error("Only approved counts can be voided");
   }
 
-  const rows = await listUsageBySource(db, "count", id);
-  for (const row of rows) {
-    const item = await getInventoryItem(db, row.inventoryItemId);
-    if (!item) continue;
-    // Ledger rows store the consumption sign (shrinkage positive), so adding
-    // them back restores the pre-count stock and value.
-    await adjustStock(
-      db,
-      item.id,
-      item.stockBaseQty + row.qtyBase,
-      item.stockValueFils + row.cogsFils,
-    );
-  }
-
-  await deleteUsageBySource(db, "count", id);
+  await revertCountStock(db, id);
   await updateInventoryCountStatus(db, id, "voided", reviewedBy);
 }
