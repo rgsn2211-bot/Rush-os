@@ -8,11 +8,33 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { stockToBaseQty } from "@/lib/calculations/costing";
 import { ClipboardList, Trash2 } from "lucide-react";
 
 interface Props {
   items: InventoryItemOps[];
   ownCounts: InventoryCount[];
+}
+
+/**
+ * "3 bags = 300 pc" — the same reassurance the receive-stock form gives, so a
+ * quantity typed in the wrong unit is caught before it is submitted. Returns
+ * null when there is nothing useful to say (blank input, or the stock unit and
+ * base unit are the same thing).
+ */
+function conversionHint(
+  raw: string | undefined,
+  item: InventoryItemOps,
+): string | null {
+  if (item.basePerStock === 1) return null;
+
+  const qty = Number(raw);
+  if (raw === undefined || raw.trim() === "" || !Number.isFinite(qty)) {
+    return null;
+  }
+
+  const baseQty = stockToBaseQty(qty, item.basePerStock);
+  return `${qty} ${item.stockUnit} = ${Math.round(baseQty * 1000) / 1000} ${item.baseUnit}`;
 }
 
 export function InventoryCountForm({ items, ownCounts: initial }: Props) {
@@ -134,7 +156,8 @@ export function InventoryCountForm({ items, ownCounts: initial }: Props) {
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-semibold">{item.name}</div>
                     <div className="text-ink-3 text-xs">
-                      Counted in {item.stockUnit}
+                      {conversionHint(counts[item.id], item) ??
+                        `Counted in ${item.stockUnit}`}
                     </div>
                   </div>
                   <Input

@@ -21,7 +21,10 @@ import {
   deleteUsageBySource,
 } from "@/repositories/inventory-usage";
 import { listInventoryItemsOps } from "@/repositories/worker-inventory";
-import { consumeStockAllowNegative } from "@/lib/calculations/costing";
+import {
+  consumeStockAllowNegative,
+  stockToBaseQty,
+} from "@/lib/calculations/costing";
 import { fallbackUnitCostFils } from "@/services/inventory-costing";
 import { todayInBahrain } from "@/lib/dates";
 
@@ -39,7 +42,7 @@ export async function logWaste(
   const item = items.find((i) => i.id === input.inventoryItemId);
   if (!item) throw new Error("Inventory item not found");
 
-  const baseQty = input.stockQty * item.basePerStock;
+  const baseQty = stockToBaseQty(input.stockQty, item.basePerStock);
 
   return insertWasteLog(db, {
     inventoryItemId: input.inventoryItemId,
@@ -68,7 +71,7 @@ export async function logWasteBatch(
     const item = itemMap.get(line.inventoryItemId);
     if (!item) throw new Error("Inventory item not found");
 
-    const baseQty = line.stockQty * item.basePerStock;
+    const baseQty = stockToBaseQty(line.stockQty, item.basePerStock);
     const log = await insertWasteLog(db, {
       inventoryItemId: line.inventoryItemId,
       baseQty,

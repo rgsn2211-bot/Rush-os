@@ -47,6 +47,21 @@ export function purchaseToBaseQty(
 }
 
 /**
+ * Stock units -> base units. What a worker counts on the shelf (e.g. 3 bags)
+ * expressed in the unit inventory is tracked in (e.g. 300 pieces).
+ *
+ * Used both to store count/waste submissions and to show the worker a live
+ * "3 bags = 300 pc" hint so a quantity entered in the wrong unit is obvious
+ * before it is submitted.
+ */
+export function stockToBaseQty(stockQty: number, basePerStock = 1): number {
+  if (basePerStock <= 0) {
+    throw new Error("basePerStock must be greater than 0");
+  }
+  return stockQty * basePerStock;
+}
+
+/**
  * Receive stock into an item. Adds quantity and its value; the new weighted
  * average falls out automatically. Returns the updated stock state.
  *

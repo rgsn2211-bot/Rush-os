@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   purchaseToBaseQty,
+  stockToBaseQty,
   receiveStock,
   averageUnitCostFils,
   consumeStock,
@@ -27,6 +28,14 @@ describe("unit conversion", () => {
   it("rejects a non-positive conversion factor", () => {
     expect(() => purchaseToBaseQty(1, 0)).toThrow();
     expect(() => purchaseToBaseQty(1, 5, 0)).toThrow();
+  });
+
+  it("converts counted stock units to base units", () => {
+    expect(stockToBaseQty(3, 100)).toBe(300); // 3 bags of 100 pieces
+    expect(stockToBaseQty(2.5, 1000)).toBe(2500); // 2.5 kg in grams
+    expect(stockToBaseQty(0, 100)).toBe(0); // counted empty
+    expect(stockToBaseQty(7)).toBe(7); // stock unit IS the base unit
+    expect(() => stockToBaseQty(1, 0)).toThrow();
   });
 });
 

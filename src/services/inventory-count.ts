@@ -26,7 +26,7 @@ import {
   type InsertInventoryUsageInput,
 } from "@/repositories/inventory-usage";
 import { listInventoryItemsOps } from "@/repositories/worker-inventory";
-import { reconcileCount } from "@/lib/calculations/costing";
+import { reconcileCount, stockToBaseQty } from "@/lib/calculations/costing";
 import { todayInBahrain } from "@/lib/dates";
 
 /**
@@ -51,7 +51,10 @@ export async function submitCount(
       throw new Error("Inventory item not found");
     }
     const expectedBaseQty = item.stockBaseQty;
-    const countedBaseQty = line.countedStockQty * item.basePerStock;
+    const countedBaseQty = stockToBaseQty(
+      line.countedStockQty,
+      item.basePerStock,
+    );
     return {
       inventoryItemId: line.inventoryItemId,
       expectedBaseQty,
