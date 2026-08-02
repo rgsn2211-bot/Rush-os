@@ -7,7 +7,11 @@ import { formatFils } from "@/lib/calculations/currency";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Check, X, Undo2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
+import { Check, X, Undo2, Pencil } from "lucide-react";
+import { WASTE_REASONS } from "@/lib/validators/waste";
 
 const REASON_LABELS: Record<string, string> = {
   spoilage: "Spoilage",
@@ -25,6 +29,57 @@ export function WasteDetail({ log }: { log: WasteLogWithDetails }) {
   const isPending = log.status === "needs_review";
   const isApproved = log.status === "approved";
   const stockQty = log.baseQty / (log.basePerStock || 1);
+  const canEdit = isPending || isApproved;
+
+  const [editing, setEditing] = useState(false);
+  const [qty, setQty] = useState(String(stockQty));
+  const [reason, setReason] = useState(log.reason);
+  const [notes, setNotes] = useState(log.notes ?? "");
+  const [effectiveOn, setEffectiveOn] = useState(log.effectiveOn ?? "");
+
+  function startEditing() {
+    setQty(String(stockQty));
+    setReason(log.reason);
+    setNotes(log.notes ?? "");
+    setEffectiveOn(log.effectiveOn ?? "");
+    setError(null);
+    setEditing(true);
+  }
+
+  async function save() {
+    setError(null);
+
+    const parsedQty = Number(qty);
+    if (!Number.isFinite(parsedQty) || parsedQty <= 0) {
+      setError("Quantity must be greater than 0.");
+      return;
+    }
+
+    setLoading(true);
+    const res = await fetch(`/api/waste/${log.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        stockQty: parsedQty,
+        reason,
+        notes: notes.trim() || null,
+        ...(effectiveOn ? { effectiveOn } : {}),
+      }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(
+        typeof data.error === "string" ? data.error : "Could not save changes",
+      );
+      setLoading(false);
+      return;
+    }
+
+    setEditing(false);
+    setLoading(false);
+    router.refresh();
+  }
 
   async function act(action: "approve" | "reject" | "void") {
     if (
@@ -120,6 +175,14 @@ export function WasteDetail({ log }: { log: WasteLogWithDetails }) {
                 </span>
               </div>
             )}
+            {log.effectiveOn && (
+              <div className="flex justify-between">
+                <span className="text-ink-2">Loss reported on</span>
+                <span className="font-mono font-semibold">
+                  {log.effectiveOn}
+                </span>
+              </div>
+            )}
             {log.notes && (
               <div className="border-line-2 mt-1 border-t pt-2">
                 <span className="text-ink-2">Notes: </span>
@@ -130,7 +193,97 @@ export function WasteDetail({ log }: { log: WasteLogWithDetails }) {
         </CardContent>
       </Card>
 
-      {isPending && (
+      {canEdit && !editing && (
+        <div>
+          <Button variant="secondary" onClick={startEditing} disabled={loading}>
+            <Pencil size={16} className="mr-1" />
+            Edit entry
+          </Button>
+        </div>
+      )}
+
+      {editing && (
+        <Card>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="qty">
+                  Quantity ({log.stockUnit ?? "units"})
+                </Label>
+                <Input
+                  id="qty"
+                  type="number"
+                  min="0"
+                  step="any"
+                  inputMode="decimal"
+                  value={qty}
+                  onChange={(e) => setQty(e.target.value)}
+                  className="font-mono"
+                />
+              </div>
+              <div>
+                <Label htmlFor="reason">Reason</Label>
+                <Select
+                  id="reason"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                >
+                  {WASTE_REASONS.map((r) => (
+                    <option key={r} value={r}>
+                      {REASON_LABELS[r] || r}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <Label htmlFor="effectiveOn">Apply loss to</Label>
+              <Input
+                id="effectiveOn"
+                type="date"
+                value={effectiveOn}
+                onChange={(e) => setEffectiveOn(e.target.value)}
+                className="max-w-[200px] font-mono"
+              />
+              <p className="text-ink-3 mt-1 text-xs">
+                The month this loss is reported in.
+              </p>
+            </div>
+
+            <div className="mt-3">
+              <Label htmlFor="notes">Notes</Label>
+              <Input
+                id="notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Optional"
+              />
+            </div>
+
+            <p className="text-ink-3 mt-3 text-sm">
+              {isApproved
+                ? "Saving re-adjusts stock and the recorded loss to match. If you already marked this as ordinary usage rather than waste, it stays that way."
+                : "Nothing is applied until you approve this entry."}
+            </p>
+
+            <div className="mt-3 flex gap-2">
+              <Button onClick={save} disabled={loading}>
+                {loading ? "Saving..." : "Save changes"}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => setEditing(false)}
+                disabled={loading}
+              >
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {isPending && !editing && (
         <div className="flex gap-2">
           <Button onClick={() => act("approve")} disabled={loading}>
             <Check size={16} className="mr-1" />
@@ -148,7 +301,7 @@ export function WasteDetail({ log }: { log: WasteLogWithDetails }) {
         </div>
       )}
 
-      {isApproved && (
+      {isApproved && !editing && (
         <div>
           <p className="text-ink-3 mb-3 text-sm">
             Voiding puts the wasted quantity and its value back into stock and

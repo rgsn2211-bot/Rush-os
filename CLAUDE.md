@@ -111,7 +111,14 @@ Supabase + Vercel.
 - Owner mobile "More" menu (slide-up sheet for pages not in bottom nav)
 - Inventory Count (worker submits blind count → owner reviews variances on a
   detail page → approve reconciles stock; owner can also "remove record" —
-  delete the count but KEEP its stock adjustment — or "void & revert stock")
+  delete the count but KEEP its stock adjustment — or "void & revert stock").
+  Counts are **editable before AND after approval** (`editCount`): editing an
+  approved count reverts its stock from the ledger, replaces the lines, and
+  re-runs the reconciliation, so stock follows the corrected numbers. The owner
+  can add an item the worker missed (its expected snapshots live on-hand).
+- Count Report (`/owner/inventory-count/report`): every count in a period with
+  per-item differences and each item's cumulative variance ("repeat
+  offenders"), filtered on the business date.
 - Inventory usage ledger (`inventory_usage`): every POS deduction, waste
   approval, and count variance writes per-event rows with cost, preserving
   product/group attribution. POS deductions and waste no longer clamp at
@@ -122,7 +129,23 @@ Supabase + Vercel.
   ledger, complimentary cost shown as an "of which" inside COGS (never
   deducted twice), expenses by category, fees, losses, net profit.
 - Losses (owner): period report of waste by item, count shrinkage by item,
-  complimentary given away, and balance-adjustment shortages/overages.
+  operational usage adjusted out of losses, complimentary given away, and
+  balance-adjustment shortages/overages. Item rows link to a per-item
+  drill-down (`/owner/losses/[itemId]`) listing every ledger movement.
+- **Loss reclassification** (`usage_class` on `inventory_usage`): a waste or
+  shrinkage row can be marked `used` (legitimate internal consumption — napkins,
+  cleaning, testing) or `sold` (the POS button was never mapped), whole or in
+  part. Partial adjustments SPLIT the row, apportioning cost by quantity with
+  the parent keeping the rounding remainder, so the pair sums exactly to the
+  original. Reclassifying is a **reporting move only**: it never touches stock,
+  never changes `occurred_on`, and never changes net profit — Profit stays keyed
+  on `source_type`, not `usage_class`. Reverting merges a split back.
+- Used vs Wasted (on the Losses page): per-item and shop-wide consumption mix
+  (sold / used / wasted / shrinkage) as percentages **of value**, plus a waste
+  rate. Overage is excluded from the denominator — stock found was never
+  consumed. Threshold + arithmetic live in `src/lib/calculations/usage-mix.ts`
+  (`WASTE_ALERT_PCT`, default 5). Items above it raise an owner-only
+  `high_waste` alert over a trailing 30 days; low-volume items are suppressed.
 - Money → Adjust Balances: owner enters the actually-counted register/bank
   amount; diff is logged (`balance_adjustments`) and posted as a
   `balance_adjustment` cash movement (affects P&L by default); history +
@@ -132,7 +155,18 @@ Supabase + Vercel.
   stock-out predictions, reorder suggestions in whole purchase units,
   fast-mover ranking.
 - Waste detail page + owner void of approved waste (restores stock exactly
-  from its ledger rows).
+  from its ledger rows). Waste is also **editable before and after approval**
+  (`editWaste`) — quantity, reason, note, business date. Editing an approved
+  entry reverts and re-applies the consumption, preserving any reclassification.
+- Inventory items can be **deleted** (soft delete) from the owner detail page
+  and the POS-manager edit page. The confirmation lists the recipes that use the
+  item and the stock value being written off; history is kept so past reports do
+  not move.
+- **Business dates on counts and waste** (`effective_on`): the date a loss is
+  reported on, independent of when it was counted or approved. Counting last
+  month's shelves today books the shrinkage to last month — stock still updates
+  now. Services fall back to `todayInBahrain()`. POS imports already used their
+  report date. Loss reports and the count report all filter on business date.
 
 **Not yet built (placeholders only):**
 - Mark Item Opened (worker quick action)

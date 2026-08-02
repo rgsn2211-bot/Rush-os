@@ -120,6 +120,29 @@ export async function getWasteLogWithDetails(
   return enriched;
 }
 
+/** Owner edits to the entry itself (quantity, reason, note, business date). */
+export async function updateWasteLogFields(
+  db: SupabaseClient,
+  id: string,
+  input: {
+    baseQty?: number;
+    reason?: string;
+    notes?: string | null;
+    effectiveOn?: string;
+  },
+): Promise<void> {
+  const updates: Record<string, unknown> = {};
+  if (input.baseQty !== undefined) updates.base_qty = input.baseQty;
+  if (input.reason !== undefined) updates.reason = input.reason;
+  if (input.notes !== undefined) updates.notes = input.notes;
+  if (input.effectiveOn !== undefined) updates.effective_on = input.effectiveOn;
+  if (Object.keys(updates).length === 0) return;
+
+  const { error } = await db.from("waste_logs").update(updates).eq("id", id);
+
+  if (error) throw error;
+}
+
 export async function updateWasteStatus(
   db: SupabaseClient,
   id: string,
