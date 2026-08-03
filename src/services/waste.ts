@@ -1,8 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { WasteLog, WasteLogWithDetails } from "@/types/inventory";
+import type {
+  WasteLog,
+  WasteLogWithDetails,
+  UsageClass,
+} from "@/types/inventory";
 import type {
   WasteLogCreateInput,
   WasteLogBatchCreateInput,
+  WasteEditInput,
 } from "@/lib/validators/waste";
 import {
   insertWasteLog,
@@ -12,6 +17,7 @@ import {
   getWasteLog,
   getWasteLogWithDetails,
   updateWasteStatus,
+  updateWasteLogFields,
   deleteWasteLog,
 } from "@/repositories/waste";
 import { getInventoryItem, adjustStock } from "@/repositories/inventory-items";
@@ -21,7 +27,10 @@ import {
   deleteUsageBySource,
 } from "@/repositories/inventory-usage";
 import { listInventoryItemsOps } from "@/repositories/worker-inventory";
-import { consumeStockAllowNegative } from "@/lib/calculations/costing";
+import {
+  consumeStockAllowNegative,
+  stockToBaseQty,
+} from "@/lib/calculations/costing";
 import { fallbackUnitCostFils } from "@/services/inventory-costing";
 import { todayInBahrain } from "@/lib/dates";
 
@@ -39,13 +48,14 @@ export async function logWaste(
   const item = items.find((i) => i.id === input.inventoryItemId);
   if (!item) throw new Error("Inventory item not found");
 
-  const baseQty = input.stockQty * item.basePerStock;
+  const baseQty = stockToBaseQty(input.stockQty, item.basePerStock);
 
   return insertWasteLog(db, {
     inventoryItemId: input.inventoryItemId,
     baseQty,
     reason: input.reason,
     notes: input.notes,
+    effectiveOn: input.effectiveOn ?? todayInBahrain(),
     createdBy,
   });
 }
@@ -68,12 +78,13 @@ export async function logWasteBatch(
     const item = itemMap.get(line.inventoryItemId);
     if (!item) throw new Error("Inventory item not found");
 
-    const baseQty = line.stockQty * item.basePerStock;
+    const baseQty = stockToBaseQty(line.stockQty, item.basePerStock);
     const log = await insertWasteLog(db, {
       inventoryItemId: line.inventoryItemId,
       baseQty,
       reason: line.reason,
       notes: line.notes,
+      effectiveOn: line.effectiveOn ?? todayInBahrain(),
       createdBy,
     });
     created.push(log);
@@ -142,6 +153,28 @@ export async function reviewWaste(
     return;
   }
 
+  await applyWasteConsumption(db, log, reviewedBy);
+}
+
+/**
+ * Consume an approved entry's quantity from stock and record the loss.
+ *
+ * The waste already happened in the real world, so if the system's on-hand is
+ * behind, stock goes negative rather than the loss being understated. The
+ * ledger row is dated by the entry's business date, not the day this runs.
+ *
+ * `usageClass` is a parameter because re-applying after an edit must preserve
+ * a reclassification the owner already made — correcting a quantity should not
+ * silently turn "used internally" back into "wasted".
+ *
+ * Shared by the approval path and the approved-entry editor.
+ */
+async function applyWasteConsumption(
+  db: SupabaseClient,
+  log: WasteLog,
+  reviewedBy: string,
+  usageClass: UsageClass = "wasted",
+): Promise<void> {
   const item = await getInventoryItem(db, log.inventoryItemId);
   if (!item) throw new Error("Inventory item not found");
 
@@ -152,20 +185,116 @@ export async function reviewWaste(
   );
   await adjustStock(db, item.id, state.baseQty, state.valueFils);
 
-  await updateWasteStatus(db, id, "approved", reviewedBy, cogsFils, log.baseQty);
+  await updateWasteStatus(
+    db,
+    log.id,
+    "approved",
+    reviewedBy,
+    cogsFils,
+    log.baseQty,
+  );
 
   // Record the loss in the usage ledger so waste shows up in COGS/loss
   // reports; consumed_base_qty on the log makes a later owner void exact.
   await insertUsageRows(db, [
     {
-      occurredOn: todayInBahrain(),
+      // The business date the loss belongs to, not the day it was approved.
+      occurredOn: log.effectiveOn ?? todayInBahrain(),
       sourceType: "waste",
-      sourceId: id,
+      sourceId: log.id,
+      usageClass,
       inventoryItemId: item.id,
       qtyBase: log.baseQty,
       cogsFils,
     },
   ]);
+}
+
+/**
+ * Undo an approved entry's stock effects from its ledger rows and clear them.
+ * Additive from the exact deltas applied at approval, so it is correct even if
+ * stock moved — or went negative — since.
+ */
+async function revertWasteStock(
+  db: SupabaseClient,
+  id: string,
+): Promise<void> {
+  const rows = await listUsageBySource(db, "waste", id);
+  if (rows.length === 0) {
+    throw new Error(
+      "This entry has no usage record to reverse — adjust the item's stock with a count instead",
+    );
+  }
+
+  for (const row of rows) {
+    const item = await getInventoryItem(db, row.inventoryItemId);
+    if (!item) continue;
+    await adjustStock(
+      db,
+      item.id,
+      item.stockBaseQty + row.qtyBase,
+      item.stockValueFils + row.cogsFils,
+    );
+  }
+
+  await deleteUsageBySource(db, "waste", id);
+}
+
+/**
+ * Owner corrects a waste entry after a mis-entry — a wrong quantity, the wrong
+ * reason, or a loss booked to the wrong month.
+ *
+ * - Pending: only the stored values change; stock is untouched until approval.
+ * - Approved: the entry's stock effects are reverted from its ledger rows, the
+ *   entry is updated, and the consumption is re-applied — so stock and the
+ *   recorded loss both follow the correction. Any reclassification the owner
+ *   made survives, because the existing rows' class is captured first.
+ */
+export async function editWaste(
+  db: SupabaseClient,
+  id: string,
+  input: WasteEditInput,
+  reviewedBy: string,
+): Promise<void> {
+  const log = await getWasteLog(db, id);
+  if (!log) throw new Error("Waste log not found");
+  if (log.status !== "needs_review" && log.status !== "approved") {
+    throw new Error("Only pending or approved waste can be edited");
+  }
+
+  let baseQty: number | undefined;
+  if (input.stockQty !== undefined) {
+    const items = await listInventoryItemsOps(db);
+    const item = items.find((i) => i.id === log.inventoryItemId);
+    if (!item) throw new Error("Inventory item not found");
+    baseQty = stockToBaseQty(input.stockQty, item.basePerStock);
+  }
+
+  if (log.status === "needs_review") {
+    await updateWasteLogFields(db, id, {
+      baseQty,
+      reason: input.reason,
+      notes: input.notes,
+      effectiveOn: input.effectiveOn,
+    });
+    return;
+  }
+
+  // Preserve an existing reclassification across the re-apply.
+  const existing = await listUsageBySource(db, "waste", id);
+  const usageClass = existing[0]?.usageClass ?? "wasted";
+
+  await revertWasteStock(db, id);
+  await updateWasteLogFields(db, id, {
+    baseQty,
+    reason: input.reason,
+    notes: input.notes,
+    effectiveOn: input.effectiveOn,
+  });
+
+  const updated = await getWasteLog(db, id);
+  if (!updated) throw new Error("Waste log not found");
+  await applyWasteConsumption(db, updated, reviewedBy, usageClass);
 }
 
 /** One waste log with item + submitter details, for the owner detail page. */
@@ -197,24 +326,6 @@ export async function voidApprovedWaste(
     throw new Error("Only approved waste can be voided");
   }
 
-  const rows = await listUsageBySource(db, "waste", id);
-  if (rows.length === 0) {
-    throw new Error(
-      "This entry has no usage record to reverse — adjust the item's stock with a count instead",
-    );
-  }
-
-  for (const row of rows) {
-    const item = await getInventoryItem(db, row.inventoryItemId);
-    if (!item) continue;
-    await adjustStock(
-      db,
-      item.id,
-      item.stockBaseQty + row.qtyBase,
-      item.stockValueFils + row.cogsFils,
-    );
-  }
-
-  await deleteUsageBySource(db, "waste", id);
+  await revertWasteStock(db, id);
   await updateWasteStatus(db, id, "voided", reviewedBy, log.valueFils);
 }

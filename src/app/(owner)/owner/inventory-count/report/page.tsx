@@ -1,14 +1,13 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireOwner } from "@/lib/auth";
 import { resolvePeriod } from "@/lib/dates";
-import { getLossesReport } from "@/services/losses";
-import { getUsageReport } from "@/services/usage-report";
+import { getCountReport } from "@/services/count-report";
 import { PageHeader } from "@/components/ui/page-header";
 import { PeriodPicker } from "@/components/ui/period-picker";
-import { LossesView } from "@/features/losses/losses-view";
-import { UsageMixView } from "@/features/losses/usage-mix-view";
+import { CountsReport } from "@/features/inventory-count/counts-report";
 
-export default async function LossesPage({
+export default async function CountReportPage({
   searchParams,
 }: {
   searchParams: Promise<{ from?: string; to?: string }>;
@@ -18,31 +17,30 @@ export default async function LossesPage({
 
   const { from, to } = await searchParams;
   const period = resolvePeriod(from, to);
-  const [report, usage] = await Promise.all([
-    getLossesReport(db, period),
-    getUsageReport(db, period),
-  ]);
+  const report = await getCountReport(db, period);
 
   return (
     <div>
+      <Link
+        href="/owner/inventory-count"
+        className="text-ink-2 hover:text-navy mb-3 inline-flex items-center gap-1 text-sm font-semibold"
+      >
+        &larr; Back to Inventory Counts
+      </Link>
+
       <PageHeader
-        title="Losses"
-        subtitle="Waste, count shrinkage, giveaways and cash shortages for any period"
+        title="Count Report"
+        subtitle="Every count in the period with its differences, by the date the losses apply to"
       />
+
       <div className="mb-5">
         <PeriodPicker
           fromInclusive={period.fromInclusive}
           toInclusive={period.toInclusive}
         />
       </div>
-      <div className="mb-5">
-        <UsageMixView
-          report={usage}
-          period={{ from: period.fromInclusive, to: period.toInclusive }}
-        />
-      </div>
 
-      <LossesView report={report} />
+      <CountsReport report={report} />
     </div>
   );
 }

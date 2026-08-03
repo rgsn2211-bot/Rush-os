@@ -107,6 +107,34 @@ export async function getRecipeIngredients(
   return data.map(toRecipeIngredient);
 }
 
+/**
+ * The non-voided products whose recipe uses an inventory item. Used to warn the
+ * owner before deleting an item that products still depend on.
+ */
+export async function listProductsUsingItem(
+  db: SupabaseClient,
+  inventoryItemId: string,
+): Promise<Product[]> {
+  const { data: rows, error } = await db
+    .from("recipe_ingredients")
+    .select("product_id")
+    .eq("inventory_item_id", inventoryItemId);
+
+  if (error) throw error;
+
+  const productIds = [...new Set(rows.map((r) => r.product_id))];
+  if (productIds.length === 0) return [];
+
+  const { data, error: productError } = await db
+    .from("products")
+    .select("*")
+    .in("id", productIds)
+    .neq("status", "voided");
+
+  if (productError) throw productError;
+  return data.map(toProduct);
+}
+
 export async function setRecipeIngredients(
   db: SupabaseClient,
   productId: string,

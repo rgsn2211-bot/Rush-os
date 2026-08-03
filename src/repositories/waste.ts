@@ -6,6 +6,8 @@ export interface InsertWasteLogInput {
   baseQty: number;
   reason: string;
   notes?: string;
+  /** Business date the loss is reported on. */
+  effectiveOn: string;
   createdBy: string;
 }
 
@@ -20,6 +22,7 @@ export async function insertWasteLog(
       base_qty: input.baseQty,
       reason: input.reason,
       notes: input.notes ?? null,
+      effective_on: input.effectiveOn,
       created_by: input.createdBy,
       status: "needs_review",
     })
@@ -115,6 +118,29 @@ export async function getWasteLogWithDetails(
   if (!log) return null;
   const [enriched] = await enrichWasteLogs(db, [log]);
   return enriched;
+}
+
+/** Owner edits to the entry itself (quantity, reason, note, business date). */
+export async function updateWasteLogFields(
+  db: SupabaseClient,
+  id: string,
+  input: {
+    baseQty?: number;
+    reason?: string;
+    notes?: string | null;
+    effectiveOn?: string;
+  },
+): Promise<void> {
+  const updates: Record<string, unknown> = {};
+  if (input.baseQty !== undefined) updates.base_qty = input.baseQty;
+  if (input.reason !== undefined) updates.reason = input.reason;
+  if (input.notes !== undefined) updates.notes = input.notes;
+  if (input.effectiveOn !== undefined) updates.effective_on = input.effectiveOn;
+  if (Object.keys(updates).length === 0) return;
+
+  const { error } = await db.from("waste_logs").update(updates).eq("id", id);
+
+  if (error) throw error;
 }
 
 export async function updateWasteStatus(
@@ -217,6 +243,7 @@ function toWasteLog(row: any): WasteLog {
     reason: row.reason,
     notes: row.notes,
     occurredAt: row.occurred_at,
+    effectiveOn: row.effective_on ?? null,
     status: row.status,
     createdBy: row.created_by,
     reviewedBy: row.reviewed_by,

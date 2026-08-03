@@ -8,14 +8,42 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { stockToBaseQty } from "@/lib/calculations/costing";
 import { ClipboardList, Trash2 } from "lucide-react";
 
 interface Props {
   items: InventoryItemOps[];
   ownCounts: InventoryCount[];
+  /** Today in Bahrain — the default business date for this count. */
+  today: string;
 }
 
-export function InventoryCountForm({ items, ownCounts: initial }: Props) {
+/**
+ * "3 bags = 300 pc" — the same reassurance the receive-stock form gives, so a
+ * quantity typed in the wrong unit is caught before it is submitted. Returns
+ * null when there is nothing useful to say (blank input, or the stock unit and
+ * base unit are the same thing).
+ */
+function conversionHint(
+  raw: string | undefined,
+  item: InventoryItemOps,
+): string | null {
+  if (item.basePerStock === 1) return null;
+
+  const qty = Number(raw);
+  if (raw === undefined || raw.trim() === "" || !Number.isFinite(qty)) {
+    return null;
+  }
+
+  const baseQty = stockToBaseQty(qty, item.basePerStock);
+  return `${qty} ${item.stockUnit} = ${Math.round(baseQty * 1000) / 1000} ${item.baseUnit}`;
+}
+
+export function InventoryCountForm({
+  items,
+  ownCounts: initial,
+  today,
+}: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,6 +52,7 @@ export function InventoryCountForm({ items, ownCounts: initial }: Props) {
   // itemId -> raw input string. Blank = not counted (skipped); "0" = counted empty.
   const [counts, setCounts] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState("");
+  const [effectiveOn, setEffectiveOn] = useState(today);
   const [ownCounts, setOwnCounts] = useState<InventoryCount[]>(initial);
 
   // Group items by category for an easier shelf walk.
@@ -73,6 +102,7 @@ export function InventoryCountForm({ items, ownCounts: initial }: Props) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         notes: notes.trim() || undefined,
+        effectiveOn,
         items: payloadItems,
       }),
     });
@@ -97,6 +127,7 @@ export function InventoryCountForm({ items, ownCounts: initial }: Props) {
     setOwnCounts([newCount, ...ownCounts]);
     setCounts({});
     setNotes("");
+    setEffectiveOn(today);
     setLoading(false);
     router.refresh();
   }
@@ -134,7 +165,8 @@ export function InventoryCountForm({ items, ownCounts: initial }: Props) {
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-semibold">{item.name}</div>
                     <div className="text-ink-3 text-xs">
-                      Counted in {item.stockUnit}
+                      {conversionHint(counts[item.id], item) ??
+                        `Counted in ${item.stockUnit}`}
                     </div>
                   </div>
                   <Input
@@ -156,13 +188,29 @@ export function InventoryCountForm({ items, ownCounts: initial }: Props) {
 
         <Card className="mb-4">
           <CardContent>
-            <Label htmlFor="notes">Notes (optional)</Label>
+            <Label htmlFor="effectiveOn">Apply losses to</Label>
             <Input
-              id="notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Anything the owner should know..."
+              id="effectiveOn"
+              type="date"
+              value={effectiveOn}
+              onChange={(e) => setEffectiveOn(e.target.value)}
+              className="max-w-[200px] font-mono"
             />
+            <p className="text-ink-3 mt-2 text-xs">
+              Leave as today unless you are counting for a month that has
+              already finished — then pick a date in that month so the loss is
+              reported there.
+            </p>
+
+            <div className="mt-4">
+              <Label htmlFor="notes">Notes (optional)</Label>
+              <Input
+                id="notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Anything the owner should know..."
+              />
+            </div>
           </CardContent>
         </Card>
 

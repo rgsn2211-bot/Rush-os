@@ -291,6 +291,7 @@ export async function processImportInventory(
         occurredOn: posImport.reportDate,
         sourceType: "pos_import",
         sourceId: importId,
+        usageClass: "sold",
         inventoryItemId,
         productId,
         productGroupId: groupId,

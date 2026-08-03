@@ -1,9 +1,13 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { requireOwner } from "@/lib/auth";
-import { inventoryCountReviewSchema } from "@/lib/validators/inventory-count";
+import {
+  inventoryCountReviewSchema,
+  inventoryCountEditSchema,
+} from "@/lib/validators/inventory-count";
 import {
   reviewCount,
+  editCount,
   voidApprovedCount,
   deleteCountAsOwner,
 } from "@/services/inventory-count";
@@ -31,6 +35,34 @@ export async function PATCH(
     return Response.json({ success: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Review failed";
+    return Response.json({ error: message }, { status: 400 });
+  }
+}
+
+/**
+ * Owner corrects a count — pending or already approved. Editing an approved
+ * count re-runs the reconciliation so stock follows the corrected numbers, and
+ * re-dates its loss to the chosen business date.
+ */
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const db = await createClient();
+  const authUser = await requireOwner(db);
+
+  const { id } = await params;
+  const body = await request.json();
+  const parsed = inventoryCountEditSchema.safeParse(body);
+  if (!parsed.success) {
+    return Response.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+
+  try {
+    await editCount(db, id, parsed.data, authUser.id);
+    return Response.json({ success: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Edit failed";
     return Response.json({ error: message }, { status: 400 });
   }
 }

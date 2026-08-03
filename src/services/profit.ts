@@ -207,6 +207,10 @@ export async function getProfitReport(
   };
 
   // ---- Losses (waste + count shrinkage, from the ledger) ------------------
+  // Deliberately keyed on sourceType, NOT usage_class. Stock the owner
+  // reclassified as "used" or "sold" still left the shelf and must still be
+  // subtracted from profit — reclassification only moves value between the
+  // Losses report's buckets, so net profit is unchanged by it.
   const wasteFils = sum(
     usage.filter((u) => u.sourceType === "waste").map((u) => u.cogsFils),
   );

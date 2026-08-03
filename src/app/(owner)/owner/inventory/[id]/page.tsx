@@ -2,13 +2,14 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { requireOwner } from "@/lib/auth";
-import { getItem } from "@/services/inventory";
+import { getItem, getItemDeletionImpact } from "@/services/inventory";
 import { formatFils, formatFilsRate } from "@/lib/calculations/currency";
 import { effectiveUnitCostFils } from "@/lib/calculations/costing";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DeleteItemButton } from "@/features/inventory/delete-item-button";
 
 export default async function InventoryItemPage({
   params,
@@ -21,6 +22,8 @@ export default async function InventoryItemPage({
   const { id } = await params;
   const item = await getItem(db, id);
   if (!item) notFound();
+
+  const impact = await getItemDeletionImpact(db, id);
 
   const unitCost = effectiveUnitCostFils(
     { baseQty: item.stockBaseQty, valueFils: item.stockValueFils },
@@ -250,7 +253,25 @@ export default async function InventoryItemPage({
             </div>
           </CardContent>
         </Card>
+
       </div>
+
+      {impact && (
+        <Card className="mt-5">
+          <CardContent>
+            <h2 className="text-ink text-base font-bold">Delete item</h2>
+            <p className="text-ink-3 mt-1 mb-3 text-sm">
+              Hides the item everywhere going forward. All past purchases,
+              waste, counts and COGS stay exactly as they are.
+            </p>
+            <DeleteItemButton
+              itemId={item.id}
+              impact={impact}
+              redirectTo="/owner/inventory"
+            />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

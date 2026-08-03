@@ -4,6 +4,7 @@ import { requireWorker } from "@/lib/auth";
 import { listInventoryItemsOps } from "@/repositories/worker-inventory";
 import { getWorkerOwnCounts } from "@/services/inventory-count";
 import { InventoryCountForm } from "@/features/worker/inventory-count-form";
+import { todayInBahrain } from "@/lib/dates";
 
 export default async function WorkerInventoryCountPage() {
   const db = await createClient();
@@ -29,7 +30,11 @@ export default async function WorkerInventoryCountPage() {
         Count the shelf and enter what you actually find. Leave an item blank to
         skip it. The owner reviews the differences before anything changes.
       </p>
-      <InventoryCountForm items={items} ownCounts={ownCounts} />
+      <InventoryCountForm
+        items={items}
+        ownCounts={ownCounts}
+        today={todayInBahrain()}
+      />
     </div>
   );
 }

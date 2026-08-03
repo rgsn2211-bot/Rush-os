@@ -1,6 +1,20 @@
 import { z } from "zod";
 
 /**
+ * The business date a count's shrinkage is reported on. Independent of when
+ * the shelves were counted and when the owner approved it: counting August's
+ * shelves for a July close books the loss to July so both months read true.
+ */
+const effectiveOn = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Use a YYYY-MM-DD date");
+
+const countLine = z.object({
+  inventoryItemId: z.string().uuid(),
+  countedStockQty: z.number().nonnegative("Counted quantity cannot be negative"),
+});
+
+/**
  * What a worker submits for a physical stock count. Each line's quantity is
  * entered in the item's STOCK unit (what the worker sees on the shelf); the
  * service converts it to base units and snapshots the expected on-hand before
@@ -8,20 +22,25 @@ import { z } from "zod";
  */
 export const inventoryCountCreateSchema = z.object({
   notes: z.string().trim().optional(),
-  items: z
-    .array(
-      z.object({
-        inventoryItemId: z.string().uuid(),
-        countedStockQty: z
-          .number()
-          .nonnegative("Counted quantity cannot be negative"),
-      }),
-    )
-    .min(1, "Count at least one item"),
+  effectiveOn: effectiveOn.optional(),
+  items: z.array(countLine).min(1, "Count at least one item"),
 });
 export type InventoryCountCreateInput = z.infer<
   typeof inventoryCountCreateSchema
 >;
+
+/**
+ * Owner edit of a submitted count — pending or already approved. The item
+ * array replaces the stored lines wholesale, so the owner can fix a mistyped
+ * quantity, drop a line, or add an item the worker missed. Editing an approved
+ * count re-runs the reconciliation, so stock follows the corrected numbers.
+ */
+export const inventoryCountEditSchema = z.object({
+  notes: z.string().trim().nullable().optional(),
+  effectiveOn: effectiveOn.optional(),
+  items: z.array(countLine).min(1, "A count needs at least one item"),
+});
+export type InventoryCountEditInput = z.infer<typeof inventoryCountEditSchema>;
 
 /** approve/reject a pending count; void reverses an approved one. */
 export const inventoryCountReviewSchema = z.object({

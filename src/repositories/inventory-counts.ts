@@ -8,6 +8,8 @@ import type {
 
 export interface InsertInventoryCountInput {
   notes?: string;
+  /** Business date the shrinkage is reported on. */
+  effectiveOn: string;
   createdBy: string;
 }
 
@@ -27,6 +29,7 @@ export async function insertInventoryCount(
     .from("inventory_counts")
     .insert({
       notes: input.notes ?? null,
+      effective_on: input.effectiveOn,
       created_by: input.createdBy,
       status: "needs_review",
     })
@@ -159,6 +162,83 @@ export async function updateInventoryCountItemValue(
   if (error) throw error;
 }
 
+/** Owner edits to the session itself (its note and the date it reports on). */
+export async function updateInventoryCountMeta(
+  db: SupabaseClient,
+  id: string,
+  input: { notes?: string | null; effectiveOn?: string },
+): Promise<void> {
+  const updates: Record<string, unknown> = {};
+  if (input.notes !== undefined) updates.notes = input.notes;
+  if (input.effectiveOn !== undefined) updates.effective_on = input.effectiveOn;
+  if (Object.keys(updates).length === 0) return;
+
+  const { error } = await db
+    .from("inventory_counts")
+    .update(updates)
+    .eq("id", id);
+
+  if (error) throw error;
+}
+
+/** Drop every line of a session, so the owner's edit can replace them wholesale. */
+export async function deleteInventoryCountItems(
+  db: SupabaseClient,
+  countId: string,
+): Promise<void> {
+  const { error } = await db
+    .from("inventory_count_items")
+    .delete()
+    .eq("count_id", countId);
+
+  if (error) throw error;
+}
+
+/**
+ * Sessions whose business date falls in [fromInclusive, toExclusive), with
+ * their lines attached — the source for the owner's count report. Filtering on
+ * effective_on (not the approval timestamp) keeps it consistent with Losses.
+ */
+export async function listCountsWithLinesBetween(
+  db: SupabaseClient,
+  fromInclusive: string,
+  toExclusive: string,
+): Promise<{ count: InventoryCount; lines: InventoryCountItem[] }[]> {
+  const { data, error } = await db
+    .from("inventory_counts")
+    .select("*")
+    .neq("status", "voided")
+    .gte("effective_on", fromInclusive)
+    .lt("effective_on", toExclusive);
+
+  if (error) throw error;
+
+  const counts = data.map(toInventoryCount);
+  if (counts.length === 0) return [];
+
+  const { data: lineRows, error: lineError } = await db
+    .from("inventory_count_items")
+    .select("*")
+    .in(
+      "count_id",
+      counts.map((c) => c.id),
+    );
+
+  if (lineError) throw lineError;
+
+  const byCount = new Map<string, InventoryCountItem[]>();
+  for (const row of lineRows.map(toInventoryCountItem)) {
+    const list = byCount.get(row.countId) ?? [];
+    list.push(row);
+    byCount.set(row.countId, list);
+  }
+
+  return counts.map((count) => ({
+    count,
+    lines: byCount.get(count.id) ?? [],
+  }));
+}
+
 export async function deleteInventoryCount(
   db: SupabaseClient,
   id: string,
@@ -265,6 +345,7 @@ function toInventoryCount(row: any): InventoryCount {
     id: row.id,
     notes: row.notes,
     countedAt: row.counted_at,
+    effectiveOn: row.effective_on ?? null,
     status: row.status,
     createdBy: row.created_by,
     reviewedBy: row.reviewed_by,
