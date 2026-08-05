@@ -116,6 +116,16 @@ Supabase + Vercel.
   approved count reverts its stock from the ledger, replaces the lines, and
   re-runs the reconciliation, so stock follows the corrected numbers. The owner
   can add an item the worker missed (its expected snapshots live on-hand).
+- **Per-line control on an approved count** (`excluded_at` on
+  `inventory_count_items`): the owner can take ONE line out of the reports while
+  leaving every other line's reconciliation intact — either keeping its stock as
+  counted (for a difference that is not a real loss or gain, e.g. finding stock
+  already paid for in an earlier period) or reverting that item's stock too.
+  Excluding deletes the line's ledger rows, so Losses/Profit/usage stop counting
+  it with no report-side changes; the line is kept and marked, and `restoreCountLine`
+  puts it back by re-reconciling. Exclusions survive `editCount`. Note a line
+  excluded with stock KEPT has no ledger rows, so a later whole-count void does
+  not undo its stock change — intended.
 - Count Report (`/owner/inventory-count/report`): every count in a period with
   per-item differences and each item's cumulative variance ("repeat
   offenders"), filtered on the business date.
