@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { Check, X, Trash2, Undo2, Pencil } from "lucide-react";
+import { Check, X, Trash2, Undo2, Pencil, EyeOff } from "lucide-react";
 
 interface Props {
   count: InventoryCountWithItems;
@@ -51,6 +51,11 @@ export function InventoryCountDetail({ count, items }: Props) {
   const isPending = count.status === "needs_review";
   const isApproved = count.status === "approved";
   const canEdit = isPending || isApproved;
+
+  // An approved count gets a trailing per-line actions column.
+  const gridCols = isApproved
+    ? "grid-cols-[1.6fr_1fr_1fr_1fr_1fr_auto]"
+    : "grid-cols-[1.6fr_1fr_1fr_1fr_1fr]";
 
   const itemById = useMemo(
     () => new Map(items.map((i) => [i.id, i])),
@@ -161,6 +166,52 @@ export function InventoryCountDetail({ count, items }: Props) {
     }
 
     setEditing(false);
+    setLoading(false);
+    router.refresh();
+  }
+
+  /**
+   * Per-line control on an approved count: take one item out of the reports
+   * (optionally putting its stock back) or restore it, leaving every other
+   * line's reconciliation untouched.
+   */
+  async function lineAction(
+    inventoryItemId: string,
+    action: "exclude_keep_stock" | "exclude_revert_stock" | "restore",
+  ) {
+    if (
+      action === "exclude_keep_stock" &&
+      !window.confirm(
+        "Drop this item from the reports? The stock stays exactly where this count put it — only its difference stops counting as a loss or gain.",
+      )
+    ) {
+      return;
+    }
+    if (
+      action === "exclude_revert_stock" &&
+      !window.confirm(
+        "Undo this item? Its stock and value go back to what they were before this count, and its difference leaves the reports.",
+      )
+    ) {
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    const res = await fetch(`/api/inventory-count/${count.id}/line`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ inventoryItemId, action }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(typeof data.error === "string" ? data.error : "Action failed");
+      setLoading(false);
+      return;
+    }
+
     setLoading(false);
     router.refresh();
   }
@@ -374,38 +425,113 @@ export function InventoryCountDetail({ count, items }: Props) {
       )}
 
       <Card className="overflow-hidden p-0">
-        <div className="text-ink-3 grid grid-cols-[1.6fr_1fr_1fr_1fr_1fr] gap-2 border-b border-line-2 px-5 py-3 text-[11px] font-bold tracking-wider uppercase">
+        <div
+          className={`text-ink-3 grid ${gridCols} gap-2 border-b border-line-2 px-5 py-3 text-[11px] font-bold tracking-wider uppercase`}
+        >
           <div>Item</div>
           <div className="text-right">Expected</div>
           <div className="text-right">Counted</div>
           <div className="text-right">Variance</div>
           <div className="text-right">Value (BHD)</div>
+          {isApproved && <div className="text-right">Actions</div>}
         </div>
-        {count.items.map((line, i) => (
-          <div
-            key={line.id}
-            className={`grid grid-cols-[1.6fr_1fr_1fr_1fr_1fr] items-center gap-2 px-5 py-3 text-sm ${
-              i > 0 ? "border-line-2 border-t" : ""
-            }`}
-          >
-            <div className="min-w-0 font-semibold">
-              {line.itemName ?? "Item"}
-              {line.stockUnit && (
-                <span className="text-ink-3 ml-1 text-xs font-normal">
-                  ({line.stockUnit})
-                </span>
+        {count.items.map((line, i) => {
+          const excluded = line.excludedAt !== null;
+          return (
+            <div
+              key={line.id}
+              className={`grid ${gridCols} items-center gap-2 px-5 py-3 text-sm ${
+                i > 0 ? "border-line-2 border-t" : ""
+              } ${excluded ? "opacity-55" : ""}`}
+            >
+              <div className="min-w-0 font-semibold">
+                {line.itemName ?? "Item"}
+                {line.stockUnit && (
+                  <span className="text-ink-3 ml-1 text-xs font-normal">
+                    ({line.stockUnit})
+                  </span>
+                )}
+                {excluded && (
+                  <span className="text-ink-3 mt-0.5 block text-[11px] font-normal">
+                    Excluded ·{" "}
+                    {line.excludedKeptStock
+                      ? "stock kept as counted"
+                      : "stock reverted"}
+                  </span>
+                )}
+              </div>
+              <div className="text-ink-2 text-right font-mono">
+                {toStock(line.expectedBaseQty, line.basePerStock)}
+              </div>
+              <div className="text-right font-mono">
+                {toStock(line.countedBaseQty, line.basePerStock)}
+              </div>
+              <div className="text-right font-mono">
+                {excluded ? (
+                  <span className="text-ink-3">—</span>
+                ) : (
+                  varianceCell(line)
+                )}
+              </div>
+              <div className="text-right font-mono">
+                {excluded ? (
+                  <span className="text-ink-3">—</span>
+                ) : (
+                  valueCell(line)
+                )}
+              </div>
+              {isApproved && (
+                <div className="flex items-center justify-end gap-1">
+                  {excluded ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        lineAction(line.inventoryItemId, "restore")
+                      }
+                      disabled={loading}
+                      className="text-navy rounded-lg px-2 py-1 text-xs font-semibold hover:underline"
+                    >
+                      Restore
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          lineAction(
+                            line.inventoryItemId,
+                            "exclude_keep_stock",
+                          )
+                        }
+                        disabled={loading}
+                        title="Keep the stock, drop this item from the reports"
+                        aria-label={`Keep stock and drop ${line.itemName ?? "item"} from reports`}
+                        className="text-ink-3 hover:text-navy rounded-lg p-1.5 transition-colors"
+                      >
+                        <EyeOff size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          lineAction(
+                            line.inventoryItemId,
+                            "exclude_revert_stock",
+                          )
+                        }
+                        disabled={loading}
+                        title="Undo this item — put its stock back too"
+                        aria-label={`Undo ${line.itemName ?? "item"} and revert its stock`}
+                        className="text-ink-3 hover:text-rush-red rounded-lg p-1.5 transition-colors"
+                      >
+                        <Undo2 size={15} />
+                      </button>
+                    </>
+                  )}
+                </div>
               )}
             </div>
-            <div className="text-ink-2 text-right font-mono">
-              {toStock(line.expectedBaseQty, line.basePerStock)}
-            </div>
-            <div className="text-right font-mono">
-              {toStock(line.countedBaseQty, line.basePerStock)}
-            </div>
-            <div className="text-right font-mono">{varianceCell(line)}</div>
-            <div className="text-right font-mono">{valueCell(line)}</div>
-          </div>
-        ))}
+          );
+        })}
       </Card>
 
       {canEdit && (
@@ -448,6 +574,13 @@ export function InventoryCountDetail({ count, items }: Props) {
       {isApproved && (
         <>
           <p className="text-ink-3 mt-4 text-sm">
+            Per item, the eye icon drops one line from the reports while leaving
+            its stock exactly as counted — for a difference that is not a real
+            loss or gain, like finding stock you had already paid for. The undo
+            arrow also puts that item&apos;s stock back. Everything else on the
+            count is untouched either way.
+          </p>
+          <p className="text-ink-3 mt-2 text-sm">
             <span className="font-semibold">Remove record</span> keeps the stock
             where this count put it and only deletes the record (it stops
             counting in variance reports).{" "}

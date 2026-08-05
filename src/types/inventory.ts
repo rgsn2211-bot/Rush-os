@@ -260,6 +260,15 @@ export interface InventoryCountItem {
   varianceBaseQty: number;
   /** Value change in fils (signed). Set on approval; 0 until then. */
   valueFils: number;
+  /**
+   * Set when the owner excluded this line from reports. Its usage-ledger rows
+   * are deleted, so no report counts it, but the line is kept so the override
+   * stays visible and can be restored.
+   */
+  excludedAt: string | null;
+  excludedBy: string | null;
+  /** Whether the line's stock adjustment was kept (true) or reverted (false). */
+  excludedKeptStock: boolean | null;
   createdAt: string;
 }
 

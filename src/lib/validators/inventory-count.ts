@@ -42,6 +42,21 @@ export const inventoryCountEditSchema = z.object({
 });
 export type InventoryCountEditInput = z.infer<typeof inventoryCountEditSchema>;
 
+/**
+ * Owner acts on ONE line of an approved count.
+ *
+ * - `exclude_keep_stock` — the shelf really holds the counted amount, but the
+ *   variance is not a real loss or gain, so stop reporting it.
+ * - `exclude_revert_stock` — the line was simply wrong: undo its stock change
+ *   as well.
+ * - `restore` — put an excluded line back.
+ */
+export const countLineActionSchema = z.object({
+  inventoryItemId: z.string().uuid(),
+  action: z.enum(["exclude_keep_stock", "exclude_revert_stock", "restore"]),
+});
+export type CountLineActionInput = z.infer<typeof countLineActionSchema>;
+
 /** approve/reject a pending count; void reverses an approved one. */
 export const inventoryCountReviewSchema = z.object({
   action: z.enum(["approve", "reject", "void"]),

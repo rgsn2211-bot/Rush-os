@@ -12,6 +12,10 @@ export interface CountReportLine {
   countedBaseQty: number;
   varianceBaseQty: number;
   valueFils: number;
+  /** Excluded by the owner: shown for transparency, absent from every total. */
+  excluded: boolean;
+  /** When excluded, whether its stock adjustment was kept. */
+  excludedKeptStock: boolean | null;
 }
 
 export interface CountReportSession {
@@ -79,11 +83,15 @@ export async function getCountReport(
         countedBaseQty: line.countedBaseQty,
         varianceBaseQty: line.varianceBaseQty,
         valueFils: line.valueFils,
+        excluded: line.excludedAt !== null,
+        excludedKeptStock: line.excludedKeptStock,
       };
     });
 
     for (const line of detailed) {
       if (line.varianceBaseQty === 0) continue;
+      // The owner took this variance out of the books deliberately.
+      if (line.excluded) continue;
       const entry = cumulative.get(line.inventoryItemId) ?? {
         inventoryItemId: line.inventoryItemId,
         name: line.name,
@@ -105,7 +113,11 @@ export async function getCountReport(
       countedAt: count.countedAt,
       status: count.status,
       itemCount: detailed.length,
-      netValueFils: detailed.reduce((s, l) => s + l.valueFils, 0),
+      netValueFils: detailed
+        .filter((l) => !l.excluded)
+        .reduce((s, l) => s + l.valueFils, 0),
+      // Excluded lines stay listed so the override is visible, but they carry
+      // no weight in any total.
       lines: detailed
         .filter((l) => l.varianceBaseQty !== 0)
         .sort((a, b) => a.valueFils - b.valueFils),
