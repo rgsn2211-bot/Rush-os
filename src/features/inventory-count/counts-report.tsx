@@ -151,10 +151,16 @@ export function CountsReport({ report }: { report: CountReport }) {
                     key={line.inventoryItemId}
                     className={`grid grid-cols-[1.6fr_1fr_1fr_1fr_1fr] items-center gap-2 px-5 py-3 text-sm ${
                       i > 0 ? "border-line-2 border-t" : ""
-                    }`}
+                    } ${line.excluded ? "opacity-50" : ""}`}
                   >
                     <div className="min-w-0 truncate font-semibold">
                       {line.name}
+                      {line.excluded && (
+                        <span className="text-ink-3 ml-1.5 text-[11px] font-normal">
+                          · excluded
+                          {line.excludedKeptStock ? " (stock kept)" : ""}
+                        </span>
+                      )}
                     </div>
                     <div className="text-ink-2 text-right font-mono">
                       {toStock(line.expectedBaseQty, line.basePerStock)}

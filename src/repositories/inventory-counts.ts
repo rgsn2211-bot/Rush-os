@@ -19,6 +19,13 @@ export interface InsertInventoryCountItemInput {
   expectedBaseQty: number;
   countedBaseQty: number;
   varianceBaseQty: number;
+  /**
+   * Carried across when an edit replaces a session's lines, so a line the owner
+   * excluded from reports is not silently resurrected.
+   */
+  excludedAt?: string | null;
+  excludedBy?: string | null;
+  excludedKeptStock?: boolean | null;
 }
 
 export async function insertInventoryCount(
@@ -52,6 +59,9 @@ export async function insertInventoryCountItems(
       expected_base_qty: r.expectedBaseQty,
       counted_base_qty: r.countedBaseQty,
       variance_base_qty: r.varianceBaseQty,
+      excluded_at: r.excludedAt ?? null,
+      excluded_by: r.excludedBy ?? null,
+      excluded_kept_stock: r.excludedKeptStock ?? null,
     })),
   );
   if (error) throw error;
@@ -145,6 +155,31 @@ export async function updateInventoryCountStatus(
       reviewed_at: new Date().toISOString(),
     })
     .eq("id", id);
+
+  if (error) throw error;
+}
+
+/**
+ * Mark a line excluded from reports, or clear the exclusion (pass nulls).
+ * `keptStock` records whether the line's stock adjustment was left in place.
+ */
+export async function updateInventoryCountItemExclusion(
+  db: SupabaseClient,
+  lineId: string,
+  input: {
+    excludedAt: string | null;
+    excludedBy: string | null;
+    keptStock: boolean | null;
+  },
+): Promise<void> {
+  const { error } = await db
+    .from("inventory_count_items")
+    .update({
+      excluded_at: input.excludedAt,
+      excluded_by: input.excludedBy,
+      excluded_kept_stock: input.keptStock,
+    })
+    .eq("id", lineId);
 
   if (error) throw error;
 }
@@ -305,13 +340,15 @@ async function summarizeCounts(
   if (countIds.length > 0) {
     const { data: lines } = await db
       .from("inventory_count_items")
-      .select("count_id, value_fils")
+      .select("count_id, value_fils, excluded_at")
       .in("count_id", countIds);
     if (lines) {
       for (const l of lines) {
         const t = tally.get(l.count_id) ?? { itemCount: 0, netValueFils: 0 };
         t.itemCount += 1;
-        t.netValueFils += Number(l.value_fils);
+        // An excluded line still counts as counted, but its variance was
+        // deliberately taken out of the numbers.
+        if (!l.excluded_at) t.netValueFils += Number(l.value_fils);
         tally.set(l.count_id, t);
       }
     }
@@ -365,6 +402,12 @@ function toInventoryCountItem(row: any): InventoryCountItem {
     countedBaseQty: Number(row.counted_base_qty),
     varianceBaseQty: Number(row.variance_base_qty),
     valueFils: Number(row.value_fils),
+    excludedAt: row.excluded_at ?? null,
+    excludedBy: row.excluded_by ?? null,
+    excludedKeptStock:
+      row.excluded_kept_stock === null || row.excluded_kept_stock === undefined
+        ? null
+        : Boolean(row.excluded_kept_stock),
     createdAt: row.created_at,
   };
 }

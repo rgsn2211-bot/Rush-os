@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   InventoryCount,
+  InventoryCountItem,
   InventoryCountSummary,
   InventoryCountWithItems,
 } from "@/types/inventory";
@@ -18,6 +19,7 @@ import {
   getInventoryCountItems,
   updateInventoryCountStatus,
   updateInventoryCountItemValue,
+  updateInventoryCountItemExclusion,
   updateInventoryCountMeta,
   deleteInventoryCount,
   deleteInventoryCountItems,
@@ -32,6 +34,7 @@ import {
   insertUsageRows,
   listUsageBySource,
   deleteUsageBySource,
+  deleteUsageRow,
   type InsertInventoryUsageInput,
 } from "@/repositories/inventory-usage";
 import { listInventoryItemsOps } from "@/repositories/worker-inventory";
@@ -165,42 +168,61 @@ async function applyCountReconciliation(
   count: InventoryCount,
 ): Promise<void> {
   const lines = await getInventoryCountItems(db, count.id);
-  const usageRows: InsertInventoryUsageInput[] = [];
-  const occurredOn = count.effectiveOn ?? todayInBahrain();
 
   for (const line of lines) {
-    const item = await getInventoryItem(db, line.inventoryItemId);
-    if (!item) continue; // item voided/removed since submission — skip its line
-
-    // Reconcile against the LIVE on-hand (stock may have drifted since the
-    // worker snapshotted the expected amount) — the physical count wins.
-    const liveVarianceBaseQty = line.countedBaseQty - item.stockBaseQty;
-
-    const { state, varianceFils } = reconcileCount(
-      { baseQty: item.stockBaseQty, valueFils: item.stockValueFils },
-      line.countedBaseQty,
-      item.defaultCostFils,
-    );
-
-    await adjustStock(db, item.id, state.baseQty, state.valueFils);
-    await updateInventoryCountItemValue(db, line.id, varianceFils);
-
-    // Ledger convention: shrinkage (stock lost) is positive consumed qty and
-    // positive cost; an overage is negative (stock gained back value).
-    if (liveVarianceBaseQty !== 0) {
-      usageRows.push({
-        occurredOn,
-        sourceType: "count",
-        sourceId: count.id,
-        inventoryItemId: item.id,
-        qtyBase: -liveVarianceBaseQty,
-        cogsFils: -varianceFils,
-        // Stock missing is shrinkage; stock found is an overage, which is not
-        // consumption at all.
-        usageClass: -varianceFils >= 0 ? "shrinkage" : "overage",
-      });
-    }
+    // A line the owner excluded from reports stays excluded across edits —
+    // re-running reconciliation must not resurrect it.
+    if (line.excludedAt) continue;
+    await reconcileCountLine(db, count, line);
   }
+}
+
+/**
+ * Reconcile ONE line: set the item's on-hand to what was counted, revalue it at
+ * its current weighted-average cost, store the value change on the line, and
+ * write the usage-ledger row for a non-zero variance.
+ *
+ * Shared by the whole-count reconciliation and by restoring a single excluded
+ * line, so the two can never drift apart.
+ */
+async function reconcileCountLine(
+  db: SupabaseClient,
+  count: InventoryCount,
+  line: InventoryCountItem,
+): Promise<void> {
+  const item = await getInventoryItem(db, line.inventoryItemId);
+  if (!item) return; // item voided/removed since submission — skip its line
+
+  // Reconcile against the LIVE on-hand (stock may have drifted since the
+  // worker snapshotted the expected amount) — the physical count wins.
+  const liveVarianceBaseQty = line.countedBaseQty - item.stockBaseQty;
+
+  const { state, varianceFils } = reconcileCount(
+    { baseQty: item.stockBaseQty, valueFils: item.stockValueFils },
+    line.countedBaseQty,
+    item.defaultCostFils,
+  );
+
+  await adjustStock(db, item.id, state.baseQty, state.valueFils);
+  await updateInventoryCountItemValue(db, line.id, varianceFils);
+
+  // Ledger convention: shrinkage (stock lost) is positive consumed qty and
+  // positive cost; an overage is negative (stock gained back value).
+  if (liveVarianceBaseQty === 0) return;
+
+  const usageRows: InsertInventoryUsageInput[] = [
+    {
+      occurredOn: count.effectiveOn ?? todayInBahrain(),
+      sourceType: "count",
+      sourceId: count.id,
+      inventoryItemId: item.id,
+      qtyBase: -liveVarianceBaseQty,
+      cogsFils: -varianceFils,
+      // Stock missing is shrinkage; stock found is an overage, which is not
+      // consumption at all.
+      usageClass: -varianceFils >= 0 ? "shrinkage" : "overage",
+    },
+  ];
 
   await insertUsageRows(db, usageRows);
 }
@@ -271,9 +293,7 @@ async function replaceCountLines(
     listInventoryItems(db),
   ]);
 
-  const expectedByItem = new Map(
-    existing.map((l) => [l.inventoryItemId, l.expectedBaseQty]),
-  );
+  const existingByItem = new Map(existing.map((l) => [l.inventoryItemId, l]));
   const itemMap = new Map(items.map((i) => [i.id, i]));
 
   const lines = input.items.map((line) => {
@@ -284,8 +304,8 @@ async function replaceCountLines(
       line.countedStockQty,
       item.basePerStock,
     );
-    const expectedBaseQty =
-      expectedByItem.get(line.inventoryItemId) ?? item.stockBaseQty;
+    const previous = existingByItem.get(line.inventoryItemId);
+    const expectedBaseQty = previous?.expectedBaseQty ?? item.stockBaseQty;
 
     return {
       countId,
@@ -293,6 +313,11 @@ async function replaceCountLines(
       expectedBaseQty,
       countedBaseQty,
       varianceBaseQty: countedBaseQty - expectedBaseQty,
+      // An exclusion the owner already made survives the edit — otherwise
+      // correcting one line would quietly pull another back into the reports.
+      excludedAt: previous?.excludedAt ?? null,
+      excludedBy: previous?.excludedBy ?? null,
+      excludedKeptStock: previous?.excludedKeptStock ?? null,
     };
   });
 
@@ -379,4 +404,99 @@ export async function voidApprovedCount(
 
   await revertCountStock(db, id);
   await updateInventoryCountStatus(db, id, "voided", reviewedBy);
+}
+
+/**
+ * Owner takes ONE line of an approved count out of the reports, leaving every
+ * other line's reconciliation alone.
+ *
+ * The case this exists for: a count "finds" stock, which books a gain — but the
+ * stock was paid for in an earlier period, so that gain is fake. Excluding the
+ * line deletes its usage-ledger rows, so Losses, Profit and the usage mix all
+ * stop counting it; the line itself is kept and marked so the override stays
+ * visible and can be undone.
+ *
+ * `revertStock` decides what happens to the stock the line moved:
+ *  - false — keep it. The shelf really does hold that amount; only the phantom
+ *    gain or loss goes away. Note that with no ledger rows left, a later
+ *    whole-count "void & revert stock" will NOT undo this line's stock change.
+ *  - true — put it back. Reversed additively from the ledger rows, so it is
+ *    correct even if stock has moved (or gone negative) since approval.
+ */
+export async function excludeCountLine(
+  db: SupabaseClient,
+  countId: string,
+  inventoryItemId: string,
+  options: { revertStock: boolean },
+  excludedBy: string,
+): Promise<void> {
+  const count = await getInventoryCount(db, countId);
+  if (!count) throw new Error("Count not found");
+  if (count.status !== "approved") {
+    throw new Error(
+      "Only lines of an approved count can be excluded — edit a pending count instead",
+    );
+  }
+
+  const lines = await getInventoryCountItems(db, countId);
+  const line = lines.find((l) => l.inventoryItemId === inventoryItemId);
+  if (!line) throw new Error("That item is not on this count");
+  if (line.excludedAt) throw new Error("That line is already excluded");
+
+  const rows = (await listUsageBySource(db, "count", countId)).filter(
+    (r) => r.inventoryItemId === inventoryItemId,
+  );
+
+  if (options.revertStock) {
+    for (const row of rows) {
+      const item = await getInventoryItem(db, row.inventoryItemId);
+      if (!item) continue;
+      await adjustStock(
+        db,
+        item.id,
+        item.stockBaseQty + row.qtyBase,
+        item.stockValueFils + row.cogsFils,
+      );
+    }
+  }
+
+  for (const row of rows) {
+    await deleteUsageRow(db, row.id);
+  }
+
+  await updateInventoryCountItemExclusion(db, line.id, {
+    excludedAt: new Date().toISOString(),
+    excludedBy,
+    keptStock: !options.revertStock,
+  });
+}
+
+/**
+ * Owner puts an excluded line back. The line is reconciled again from scratch —
+ * an absolute set, so it lands on the counted quantity whatever stock has done
+ * meanwhile — and its variance reappears in the reports.
+ */
+export async function restoreCountLine(
+  db: SupabaseClient,
+  countId: string,
+  inventoryItemId: string,
+): Promise<void> {
+  const count = await getInventoryCount(db, countId);
+  if (!count) throw new Error("Count not found");
+  if (count.status !== "approved") {
+    throw new Error("Only lines of an approved count can be restored");
+  }
+
+  const lines = await getInventoryCountItems(db, countId);
+  const line = lines.find((l) => l.inventoryItemId === inventoryItemId);
+  if (!line) throw new Error("That item is not on this count");
+  if (!line.excludedAt) throw new Error("That line is not excluded");
+
+  await updateInventoryCountItemExclusion(db, line.id, {
+    excludedAt: null,
+    excludedBy: null,
+    keptStock: null,
+  });
+
+  await reconcileCountLine(db, count, line);
 }
